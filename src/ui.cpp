@@ -42,14 +42,18 @@ void Ui::drawSplash(TFT_eSPI& tft, const char* msg) {
   int w = scrW(rotation_);
   int h = scrH(rotation_);
   tft.fillScreen(kSplashBg);
-  drawBrandLogo(tft, w / 2, h / 2 - 36);
+  int logoY = min(24, (h - LOGO_SOLAR_MONITORING_H) / 2);
+  drawBrandLogo(tft, w / 2, logoY + LOGO_SOLAR_MONITORING_H / 2);
+  int textY = logoY + LOGO_SOLAR_MONITORING_H + 12;
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(kSplashText, kSplashBg);
-  tft.drawString("Solar Monitoring", w / 2, h / 2 + 44, 4);
+  tft.drawString("Solar Monitoring", w / 2, textY, 2);
   tft.setTextColor(kSplashAccent, kSplashBg);
-  tft.drawString("Viewer", w / 2, h / 2 + 76, 4);
+  tft.drawString("Viewer", w / 2, textY + 18, 2);
   tft.setTextColor(kSplashMuted, kSplashBg);
-  tft.drawString(msg, w / 2, h / 2 + 112, 2);
+  if (textY + 36 < h - 8) {
+    tft.drawString(msg, w / 2, textY + 36, 1);
+  }
 }
 
 void Ui::drawWifiPortal(TFT_eSPI& tft, const char* apName) {
