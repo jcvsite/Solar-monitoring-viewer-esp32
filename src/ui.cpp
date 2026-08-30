@@ -15,11 +15,15 @@
 
 static const ThemePalette& th() { return themeActive(); }
 
+static constexpr uint16_t kSplashBg = 0xFFFF;
+static constexpr uint16_t kSplashText = 0x2104;
+static constexpr uint16_t kSplashAccent = 0xFD20;
+static constexpr uint16_t kSplashMuted = 0x7BEF;
+
 static void drawBrandLogo(TFT_eSPI& tft, int centerX, int centerY) {
   int x = centerX - LOGO_SOLAR_MONITORING_W / 2;
   int y = centerY - LOGO_SOLAR_MONITORING_H / 2;
-  tft.pushImage(x, y, LOGO_SOLAR_MONITORING_W, LOGO_SOLAR_MONITORING_H,
-                logo_solar_monitoring, LOGO_SOLAR_MONITORING_KEY);
+  tft.pushImage(x, y, LOGO_SOLAR_MONITORING_W, LOGO_SOLAR_MONITORING_H, logo_solar_monitoring);
 }
 
 void Ui::setTheme(uint8_t themeId) {
@@ -37,14 +41,14 @@ void Ui::begin(TFT_eSPI& tft) {
 void Ui::drawSplash(TFT_eSPI& tft, const char* msg) {
   int w = scrW(rotation_);
   int h = scrH(rotation_);
-  tft.fillScreen(th().bg);
+  tft.fillScreen(kSplashBg);
   drawBrandLogo(tft, w / 2, h / 2 - 36);
   tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(th().text, th().bg);
+  tft.setTextColor(kSplashText, kSplashBg);
   tft.drawString("Solar Monitoring", w / 2, h / 2 + 44, 4);
-  tft.setTextColor(th().pv, th().bg);
+  tft.setTextColor(kSplashAccent, kSplashBg);
   tft.drawString("Viewer", w / 2, h / 2 + 76, 4);
-  tft.setTextColor(th().muted, th().bg);
+  tft.setTextColor(kSplashMuted, kSplashBg);
   tft.drawString(msg, w / 2, h / 2 + 112, 2);
 }
 

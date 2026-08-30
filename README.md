@@ -217,7 +217,7 @@ All can poll the same solar-monitoring host — the APIs are stateless.
 
 ## For developers
 
-- **Logo bitmap:** splash and WiFi setup use `include/logo_solar_monitoring.h`, generated from the monorepo icon:
+- **Logo bitmap:** boot splash uses the full icon (white background preserved) on a white screen; WiFi setup also shows the logo. Regenerate with:
   `python esp32_display/scripts/png_to_logo_header.py` (reads `static/icons/icon-192x192.png`).
 - APIs: `GET /api/display`, `/api/display/bms`, `/api/display/history?hours=24`  
   Glance payload includes `clock`, `timezone`, `tz_offset_sec`, and `weather` (Open-Meteo, cached on the host).  

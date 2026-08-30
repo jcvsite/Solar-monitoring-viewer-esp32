@@ -12,26 +12,9 @@ except ImportError:
     print("Install Pillow: pip install pillow", file=sys.stderr)
     sys.exit(1)
 
-# Magenta key — unlikely in the solar logo; skipped by TFT_eSPI pushImage(..., key).
-TRANSP_KEY = 0xF81F
-
 
 def rgb888_to_rgb565(r: int, g: int, b: int) -> int:
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-
-
-def is_background(r: int, g: int, b: int, a: int, x: int, y: int, size: int) -> bool:
-    if a < 32:
-        return True
-    # Source icon uses opaque white outside the circular artwork.
-    if r > 248 and g > 248 and b > 248:
-        return True
-    cx = (size - 1) / 2.0
-    cy = (size - 1) / 2.0
-    radius = size / 2.0 - 1.0
-    dx = x - cx
-    dy = y - cy
-    return (dx * dx + dy * dy) > (radius * radius)
 
 
 def convert(png_path: Path, out_path: Path, size: int) -> None:
@@ -42,13 +25,14 @@ def convert(png_path: Path, out_path: Path, size: int) -> None:
     for y in range(size):
         for x in range(size):
             r, g, b, a = img.getpixel((x, y))
-            if is_background(r, g, b, a, x, y, size):
-                pixels.append(TRANSP_KEY)
-            else:
-                px = rgb888_to_rgb565(r, g, b)
-                if px == TRANSP_KEY:
-                    px = 0xF820  # nudge if collision
-                pixels.append(px)
+            if a < 255:
+                # Premultiply partial transparency onto white (matches splash background).
+                alpha = a / 255.0
+                bg = 255
+                r = int(r * alpha + bg * (1.0 - alpha))
+                g = int(g * alpha + bg * (1.0 - alpha))
+                b = int(b * alpha + bg * (1.0 - alpha))
+            pixels.append(rgb888_to_rgb565(r, g, b))
 
     var = "logo_solar_monitoring"
     lines = [
@@ -58,7 +42,6 @@ def convert(png_path: Path, out_path: Path, size: int) -> None:
         "",
         f"#define LOGO_SOLAR_MONITORING_W {size}",
         f"#define LOGO_SOLAR_MONITORING_H {size}",
-        f"#define LOGO_SOLAR_MONITORING_KEY 0x{TRANSP_KEY:04X}",
         "",
         f"static const uint16_t {var}[] PROGMEM = {{",
     ]
