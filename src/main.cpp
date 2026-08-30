@@ -14,6 +14,9 @@
 #include "discovery.h"
 #include "touch_input.h"
 #include "ui.h"
+#include "ui_lv.h"
+#include "ui_lv/ui_actions.h"
+#include "lvgl_port.h"
 #include "theme.h"
 #include "layout.h"
 #include "git_ota.h"
@@ -29,15 +32,15 @@ TFT_eSPI tft;
 SettingsStore store;
 ApiClient api;
 Discovery discovery;
-Ui ui;
+UiLv ui;
 
 HostSettings settings;
 GlanceData glance;
 BmsData bms;
 HistoryData history;
 
-Page page = Page::Glance;
-SettingsTab settingsTab = SettingsTab::Connection;
+UiPage page = UiPage::Glance;
+UiSettingsTab settingsTab = UiSettingsTab::Connection;
 uint32_t lastPoll = 0;
 uint32_t lastConfigPoll = 0;
 uint32_t lastGood = 0;
@@ -64,13 +67,28 @@ String pinEntry;
 String pinStatus;
 String pinSetFirst;
 uint8_t pinSetPhase = 0;
-Page pinReturnPage = Page::Glance;
+UiPage pinReturnPage = UiPage::Glance;
 
 static const char* kLayoutNames[] = {"Classic", "Compact", "Ring", "Bars", "Flow"};
 static const char* kThemeNames[] = {"Dark", "Light", "Solar", "Ocean", "Forest"};
 
 static void pollIfDue(bool force);
 static void pollDisplayConfig(bool force);
+static bool glanceGridAlert(const GlanceData& g);
+
+static const char* rotationLabel(uint8_t r);
+static void refreshCurrentPage();
+static void handleUiAction(UiActionId id, const UiActionCtx& ctx);
+static void openSettingsPage();
+static void applyScreenRotation();
+static void startHostDiscovery();
+static void openManualHost();
+static void startWifiScan();
+static bool ensureWifi(bool forcePortal);
+static bool connectPickedWifi(const String& ssid, const String& pass);
+static void showHostChoice();
+static String manualOctetsToIp();
+static void handlePinPadCommon(bool forSet);
 
 static const char* rotationLabel(uint8_t r) {
   switch (r & 3) {
@@ -85,12 +103,281 @@ static const char* rotationLabel(uint8_t r) {
   }
 }
 
-static void applyHostSettingsFromConfig(const DisplayConfig& cfg);
+static void refreshCurrentPage() {
+  const bool stale = (lastGood == 0) || (millis() - lastGood > STALE_MS);
+  switch (page) {
+    case UiPage::Glance:
+      ui.updateGlance(glance, stale, glanceGridAlert(glance), settings.glanceLayout);
+      break;
+    case UiPage::Bms:
+      ui.updateBms(bms);
+      break;
+    case UiPage::History:
+      ui.updateHistory(history);
+      break;
+    case UiPage::Settings:
+    case UiPage::SettingsConn:
+    case UiPage::SettingsUpdates:
+      ui.updateSettings(settings, WiFi.status() == WL_CONNECTED, WiFi.SSID(),
+                        settingsTab == UiSettingsTab::Updates ? otaStatus : statusMsg, otaStatus, settingsTab,
+                        FW_VERSION);
+      break;
+    case UiPage::PickLayout:
+      ui.showPickList("Layout", kLayoutNames, 5, settings.glanceLayout, false);
+      break;
+    case UiPage::PickTheme:
+      ui.showPickList("Theme", kThemeNames, 5, settings.themeId, true);
+      break;
+    case UiPage::FindingHost:
+      ui.showFindingHost(statusMsg);
+      break;
+    case UiPage::HostChoice:
+      ui.showHostChoice(WiFi.SSID());
+      break;
+    case UiPage::ManualHost:
+      ui.showManualHost(manualOctets, manualSel, settings.hostPort, statusMsg);
+      break;
+    case UiPage::WifiPick:
+      ui.showWifiNetworks(wifiNets, wifiSelected, wifiStatus);
+      break;
+    case UiPage::WifiPassword:
+      ui.showWifiPassword(wifiPickSsid, wifiPassword, wifiShowPass, wifiStatus);
+      break;
+    case UiPage::PinUnlock:
+      ui.showPinPad("Settings locked", pinEntry, "Enter 4-digit PIN", pinStatus);
+      break;
+    case UiPage::PinSet:
+      ui.showPinPad("Settings PIN", pinEntry, pinSetPhase ? "Confirm PIN" : "New PIN (4 digits)", pinStatus);
+      break;
+    default:
+      break;
+  }
+}
+
+static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
+  switch (id) {
+    case UiActionId::NavPage:
+      settingsPinUnlocked = false;
+      page = ctx.page;
+      settingsTab = UiSettingsTab::Connection;
+      pollIfDue(true);
+      needRedraw = true;
+      break;
+    case UiActionId::OpenSettings:
+      openSettingsPage();
+      break;
+    case UiActionId::PickLayout:
+      settings.glanceLayout = (uint8_t)ctx.index;
+      store.save(settings);
+      page = UiPage::Settings;
+      needRedraw = true;
+      break;
+    case UiActionId::PickTheme:
+      settings.themeId = (uint8_t)ctx.index;
+      ui.setTheme(settings.themeId);
+      store.save(settings);
+      page = UiPage::Settings;
+      needRedraw = true;
+      break;
+    case UiActionId::RotateScreen:
+      settings.screenRotation = (settings.screenRotation + 1) & 3;
+      store.save(settings);
+      applyScreenRotation();
+      statusMsg = rotationLabel(settings.screenRotation);
+      needRedraw = true;
+      break;
+    case UiActionId::OpenPinSet:
+      page = UiPage::PinSet;
+      pinSetPhase = 0;
+      pinSetFirst = "";
+      pinEntry = "";
+      pinStatus = "New PIN (4 digits)";
+      needRedraw = true;
+      break;
+    case UiActionId::StartHostDiscovery:
+      startHostDiscovery();
+      break;
+    case UiActionId::OpenManualHost:
+      openManualHost();
+      break;
+    case UiActionId::StartWifiScan:
+      page = UiPage::WifiPick;
+      startWifiScan();
+      break;
+    case UiActionId::WifiRescan:
+      startWifiScan();
+      break;
+    case UiActionId::WifiPhonePortal:
+      statusMsg = "Opening phone portal...";
+      needRedraw = true;
+      if (ensureWifi(true)) {
+        statusMsg = "WiFi OK " + WiFi.localIP().toString();
+        page = UiPage::Settings;
+      } else {
+        statusMsg = "Portal cancelled";
+      }
+      needRedraw = true;
+      break;
+    case UiActionId::WifiPickNetwork:
+      if (ctx.index >= 0 && ctx.index < (int)wifiNets.size()) {
+        wifiSelected = ctx.index;
+        wifiPickSsid = wifiNets[ctx.index].ssid;
+        if (!wifiNets[ctx.index].secure) {
+          if (connectPickedWifi(wifiPickSsid, "")) {
+            statusMsg = wifiStatus;
+            page = settings.hostIp.length() ? UiPage::Glance : UiPage::HostChoice;
+          } else {
+            page = UiPage::WifiPick;
+          }
+        } else {
+          wifiPassword = "";
+          wifiShowPass = false;
+          wifiStatus = "Enter password";
+          page = UiPage::WifiPassword;
+        }
+        needRedraw = true;
+      }
+      break;
+    case UiActionId::WifiConnect: {
+      wifiPassword = ui.getWifiPasswordInput();
+      if (connectPickedWifi(wifiPickSsid, wifiPassword)) {
+        statusMsg = wifiStatus;
+        page = settings.hostIp.length() ? UiPage::Glance : UiPage::HostChoice;
+      } else {
+        page = UiPage::WifiPassword;
+      }
+      needRedraw = true;
+      break;
+    }
+    case UiActionId::WifiBack:
+      if (page == UiPage::WifiPassword) {
+        page = UiPage::WifiPick;
+        wifiStatus = "Tap your network";
+      } else {
+        page = UiPage::Settings;
+        statusMsg = wifiStatus;
+      }
+      needRedraw = true;
+      break;
+    case UiActionId::HostChoiceDiscover:
+      startHostDiscovery();
+      break;
+    case UiActionId::HostChoiceManual:
+      openManualHost();
+      break;
+    case UiActionId::FindingHostCancel:
+      showHostChoice();
+      break;
+    case UiActionId::ManualOctetSelect:
+      manualSel = (uint8_t)ctx.index;
+      needRedraw = true;
+      break;
+    case UiActionId::ManualOctetDec:
+      manualOctets[manualSel] = (manualOctets[manualSel] == 0) ? 255 : manualOctets[manualSel] - 1;
+      needRedraw = true;
+      break;
+    case UiActionId::ManualOctetInc:
+      manualOctets[manualSel] = (manualOctets[manualSel] == 255) ? 0 : manualOctets[manualSel] + 1;
+      needRedraw = true;
+      break;
+    case UiActionId::ManualPortDec:
+      if (settings.hostPort > 1) settings.hostPort--;
+      needRedraw = true;
+      break;
+    case UiActionId::ManualPortInc:
+      if (settings.hostPort < 65535) settings.hostPort++;
+      needRedraw = true;
+      break;
+    case UiActionId::ManualTest: {
+      const String ip = manualOctetsToIp();
+      statusMsg = "Testing...";
+      needRedraw = true;
+      String title;
+      if (api.probeHost(ip, settings.hostPort, settings.token, title)) {
+        statusMsg = title.length() ? title : "Host OK";
+      } else {
+        statusMsg = "Not reachable";
+      }
+      needRedraw = true;
+      break;
+    }
+    case UiActionId::ManualSave:
+      settings.hostIp = manualOctetsToIp();
+      store.save(settings);
+      deviceWeb.applySettings(settings);
+      statusMsg = "Saved";
+      page = UiPage::Glance;
+      pollIfDue(true);
+      needRedraw = true;
+      break;
+    case UiActionId::ManualBack:
+      page = settings.hostIp.length() ? UiPage::Settings : UiPage::HostChoice;
+      statusMsg = "";
+      needRedraw = true;
+      break;
+    case UiActionId::ToggleCheckUpdate:
+      settings.checkForUpdate = !settings.checkForUpdate;
+      if (!settings.checkForUpdate) settings.autoInstallUpdate = false;
+      store.save(settings);
+      gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
+                       settings.autoInstallUpdate);
+      needRedraw = true;
+      break;
+    case UiActionId::ToggleAutoUpdate:
+      settings.autoInstallUpdate = !settings.autoInstallUpdate;
+      if (settings.autoInstallUpdate) settings.checkForUpdate = true;
+      store.save(settings);
+      gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
+                       settings.autoInstallUpdate);
+      needRedraw = true;
+      break;
+    case UiActionId::ToggleGridAlert:
+      settings.gridOfflineAlert = !settings.gridOfflineAlert;
+      store.save(settings);
+      needRedraw = true;
+      break;
+    case UiActionId::ToggleUseHostConfig:
+      settings.useHostConfig = !settings.useHostConfig;
+      store.save(settings);
+      if (settings.useHostConfig) pollDisplayConfig(true);
+      needRedraw = true;
+      break;
+    case UiActionId::OtaCheckNow: {
+      String st;
+      gitOta.installLatest(st);
+      otaStatus = st;
+      needRedraw = true;
+      break;
+    }
+    case UiActionId::PinDigit:
+      if (pinEntry.length() < 4) {
+        pinEntry += String(ctx.digit);
+        if (page == UiPage::PinUnlock || page == UiPage::PinSet) ui.updatePinPad(pinEntry, pinStatus);
+        if (pinEntry.length() == 4 && page == UiPage::PinUnlock) handlePinPadCommon(false);
+      }
+      break;
+    case UiActionId::PinDelete:
+      if (pinEntry.length()) pinEntry.remove(pinEntry.length() - 1);
+      ui.updatePinPad(pinEntry, pinStatus);
+      break;
+    case UiActionId::PinOk:
+      handlePinPadCommon(page == UiPage::PinSet);
+      needRedraw = true;
+      break;
+    case UiActionId::PinBack:
+      pinEntry = "";
+      page = (page == UiPage::PinSet) ? UiPage::Settings : UiPage::Glance;
+      needRedraw = true;
+      break;
+    default:
+      break;
+  }
+}
 
 static void startWifiScan() {
   wifiStatus = "Scanning...";
   needRedraw = true;
-  ui.drawWifiNetworks(tft, wifiNets, wifiScroll, wifiSelected, wifiStatus);
+  ui.showWifiNetworks(wifiNets, wifiSelected, wifiStatus);
   if (wifiScanNetworks(wifiNets)) {
     wifiScroll = 0;
     wifiSelected = 0;
@@ -105,7 +392,7 @@ static void startWifiScan() {
 static bool connectPickedWifi(const String& ssid, const String& pass) {
   wifiStatus = "Connecting...";
   needRedraw = true;
-  ui.drawSplash(tft, wifiStatus.c_str());
+  ui.showSplash(wifiStatus.c_str());
   if (!wifiConnectAndSave(ssid.c_str(), pass.c_str())) {
     wifiStatus = "Failed — check password";
     return false;
@@ -168,7 +455,7 @@ static String manualOctetsToIp() {
 
 static void showHostChoice() {
   discovery.cancelSearch();
-  page = Page::HostChoice;
+  page = UiPage::HostChoice;
   statusMsg = "";
   needRedraw = true;
 }
@@ -177,7 +464,7 @@ static void openManualHost() {
   discovery.cancelSearch();
   loadManualOctetsFromSettings();
   manualSel = 0;
-  page = Page::ManualHost;
+  page = UiPage::ManualHost;
   statusMsg = "Tap octet, use +/-";
   needRedraw = true;
 }
@@ -186,7 +473,7 @@ static void startHostDiscovery() {
   found.clear();
   discovery.cancelSearch();
   discovery.beginSearch(settings.hostPort);
-  page = Page::FindingHost;
+  page = UiPage::FindingHost;
   statusMsg = "Searching...";
   needRedraw = true;
 }
@@ -198,7 +485,7 @@ static void finishHostDiscovery() {
     settings.hostPort = found[0].port;
     store.save(settings);
     statusMsg = "Found " + settings.hostIp;
-    page = Page::Glance;
+    page = UiPage::Glance;
     pollIfDue(true);
   } else {
     statusMsg = "Not found";
@@ -241,13 +528,11 @@ static void applyScreenRotation() {
   ui.setRotation(settings.screenRotation);
 }
 
-static TouchSample lastTouch;
-static uint32_t lastTouchAt = 0;
 static String gPortalApName;
 
 static void configModeCallback(WiFiManager* wm) {
   (void)wm;
-  ui.drawWifiPortal(tft, gPortalApName.c_str());
+  ui.showWifiPortal(gPortalApName.c_str());
 }
 
 static bool ensureWifi(bool forcePortal) {
@@ -279,12 +564,12 @@ static bool ensureWifi(bool forcePortal) {
       "</style>");
 
   if (forcePortal) {
-    ui.drawWifiPortal(tft, gPortalApName.c_str());
+    ui.showWifiPortal(gPortalApName.c_str());
     bool ok = wm.startConfigPortal(gPortalApName.c_str());
     return ok && WiFi.status() == WL_CONNECTED;
   }
 
-  ui.drawSplash(tft, "WiFi...");
+  ui.showSplash("WiFi...");
   bool ok = false;
   if (seedOk) {
     ok = wm.autoConnect(gPortalApName.c_str(), NULL);
@@ -294,7 +579,7 @@ static bool ensureWifi(bool forcePortal) {
       while (WiFi.status() != WL_CONNECTED && millis() - t0 < 12000) delay(200);
       ok = WiFi.status() == WL_CONNECTED;
       if (!ok) {
-        ui.drawWifiPortal(tft, gPortalApName.c_str());
+        ui.showWifiPortal(gPortalApName.c_str());
         ok = wm.startConfigPortal(gPortalApName.c_str());
       }
     }
@@ -308,15 +593,15 @@ static bool pinIsSet() { return settings.settingsPin.length() == 4; }
 
 static void openSettingsPage() {
   if (pinIsSet() && !settingsPinUnlocked) {
-    page = Page::PinUnlock;
+    page = UiPage::PinUnlock;
     pinEntry = "";
     pinStatus = "Enter PIN";
-    pinReturnPage = Page::Settings;
+    pinReturnPage = UiPage::Settings;
     needRedraw = true;
     return;
   }
-  page = Page::Settings;
-  settingsTab = SettingsTab::Connection;
+  page = UiPage::Settings;
+  settingsTab = UiSettingsTab::Connection;
   settingsPinUnlocked = true;
   pollIfDue(true);
   needRedraw = true;
@@ -331,7 +616,7 @@ static void handlePinPadCommon(bool forSet) {
       pinSetPhase = 0;
       pinSetFirst = "";
       pinStatus = "PIN disabled";
-      page = Page::Settings;
+      page = UiPage::Settings;
       needRedraw = true;
       return;
     }
@@ -359,7 +644,7 @@ static void handlePinPadCommon(bool forSet) {
     pinSetPhase = 0;
     pinSetFirst = "";
     pinStatus = "PIN saved";
-    page = Page::Settings;
+    page = UiPage::Settings;
     needRedraw = true;
     return;
   }
@@ -452,7 +737,7 @@ static void pollIfDue(bool force) {
   lastPoll = millis();
   if (settings.hostIp.length() == 0 || WiFi.status() != WL_CONNECTED) return;
 
-  if (page == Page::Glance || force) {
+  if (page == UiPage::Glance || force) {
     GlanceData g;
     if (api.fetchGlance(settings.hostIp, settings.hostPort, settings.token, g)) {
       if (g.tz_offset_sec >= -43200 && g.tz_offset_sec <= 50400) {
@@ -465,14 +750,14 @@ static void pollIfDue(bool force) {
         needRedraw = true;
       } else {
         glance = g;
-        if (page == Page::Glance && headerChanged) {
-          ui.refreshHeaderTime(tft, glance);
+        if (page == UiPage::Glance && headerChanged) {
+          ui.refreshHeaderTime(glance);
         }
       }
       lastGood = millis();
     }
   }
-  if (page == Page::Bms) {
+  if (page == UiPage::Bms) {
     BmsData b;
     if (api.fetchBms(settings.hostIp, settings.hostPort, settings.token, b)) {
       bms = b;
@@ -480,392 +765,13 @@ static void pollIfDue(bool force) {
       needRedraw = true;
     }
   }
-  if (page == Page::History) {
+  if (page == UiPage::History) {
     HistoryData h;
     if (api.fetchHistory(settings.hostIp, settings.hostPort, settings.token, 24, h)) {
       history = h;
       lastGood = millis();
       needRedraw = true;
     }
-  }
-}
-
-static bool pollTouch(TouchSample& s) {
-  static uint32_t lastScan = 0;
-  if (millis() - lastScan < 25) return false;
-  lastScan = millis();
-  if (!touchInputSample(s)) return false;
-  lastTouch = s;
-  lastTouchAt = millis();
-  return true;
-}
-
-static void handleTouch() {
-  TouchSample s;
-  static uint32_t lastTap = 0;
-  if (!pollTouch(s)) return;
-  if (millis() - lastTap < 300) return;
-  lastTap = millis();
-
-  int16_t x = s.x;
-  int16_t y = s.y;
-  uint8_t rot = settings.screenRotation;
-  int sh = scrH(rot);
-
-  Page navPage;
-  if (ui.navPageAt(x, y, navPage, rot) && (uint8_t)page <= (uint8_t)Page::Settings) {
-    if (navPage == Page::Settings) {
-      openSettingsPage();
-      return;
-    }
-    settingsPinUnlocked = false;
-    page = navPage;
-    settingsTab = SettingsTab::Connection;
-    pollIfDue(true);
-    needRedraw = true;
-    return;
-  }
-
-  if (page == Page::HostChoice) {
-    if (y >= 120 && y <= 192) {
-      startHostDiscovery();
-      return;
-    }
-    if (y >= 210 && y <= 282) {
-      openManualHost();
-      return;
-    }
-    return;
-  }
-
-  if (page == Page::FindingHost) {
-    if (y >= 210 && y <= 260) {
-      showHostChoice();
-      return;
-    }
-    return;
-  }
-
-  if (page == Page::ManualHost) {
-    int w = scrW(rot);
-    const int octX[4] = {8, 66, 124, 182};
-    for (int i = 0; i < 4; i++) {
-      if (y >= 52 && y <= 92 && x >= octX[i] && x <= octX[i] + 48) {
-        manualSel = (uint8_t)i;
-        needRedraw = true;
-        return;
-      }
-    }
-    if (y >= 110 && y <= 150 && x >= 15 && x <= 75) {
-      manualOctets[manualSel] = (manualOctets[manualSel] == 0) ? 255 : manualOctets[manualSel] - 1;
-      needRedraw = true;
-      return;
-    }
-    if (y >= 110 && y <= 150 && x >= w - 75 && x <= w - 15) {
-      manualOctets[manualSel] = (manualOctets[manualSel] == 255) ? 0 : manualOctets[manualSel] + 1;
-      needRedraw = true;
-      return;
-    }
-    if (y >= 165 && y <= 195 && x >= 15 && x <= 75) {
-      if (settings.hostPort > 1) settings.hostPort--;
-      needRedraw = true;
-      return;
-    }
-    if (y >= 165 && y <= 195 && x >= w - 75 && x <= w - 15) {
-      if (settings.hostPort < 65535) settings.hostPort++;
-      needRedraw = true;
-      return;
-    }
-    if (y >= 205 && y <= 239 && x >= 10 && x <= w / 2 - 5) {
-      String ip = manualOctetsToIp();
-      statusMsg = "Testing...";
-      needRedraw = true;
-      ui.drawManualHost(tft, manualOctets, manualSel, settings.hostPort, statusMsg);
-      String title;
-      if (api.probeHost(ip, settings.hostPort, settings.token, title)) {
-        statusMsg = title.length() ? title : "Host OK";
-      } else {
-        statusMsg = "Not reachable";
-      }
-      needRedraw = true;
-      return;
-    }
-    if (y >= 205 && y <= 239 && x >= w / 2 + 5 && x <= w - 10) {
-      settings.hostIp = manualOctetsToIp();
-      store.save(settings);
-      deviceWeb.applySettings(settings);
-      statusMsg = "Saved";
-      page = Page::Glance;
-      pollIfDue(true);
-      needRedraw = true;
-      return;
-    }
-    if (y >= 248 && y <= 282 && x >= 10 && x <= w - 10) {
-      page = settings.hostIp.length() ? Page::Settings : Page::HostChoice;
-      statusMsg = "";
-      needRedraw = true;
-      return;
-    }
-    return;
-  }
-
-  if (page == Page::PickLayout) {
-    int idx = 0;
-    if (ui.pickListAt(x, y, 36, 5, idx, rot)) {
-      settings.glanceLayout = (uint8_t)idx;
-      store.save(settings);
-      page = Page::Settings;
-      needRedraw = true;
-      return;
-    }
-    if (y >= sh - 40) {
-      page = Page::Settings;
-      needRedraw = true;
-    }
-    return;
-  }
-
-  if (page == Page::PickTheme) {
-    int idx = 0;
-    if (ui.pickListAt(x, y, 36, 5, idx, rot)) {
-      settings.themeId = (uint8_t)idx;
-      ui.setTheme(settings.themeId);
-      store.save(settings);
-      page = Page::Settings;
-      needRedraw = true;
-      return;
-    }
-    if (y >= sh - 40) {
-      page = Page::Settings;
-      needRedraw = true;
-    }
-    return;
-  }
-
-  if (page == Page::Settings || page == Page::SettingsConn || page == Page::SettingsUpdates) {
-    SettingsTab tab;
-    if (ui.settingsTabAt(x, y, tab, rot)) {
-      settingsTab = tab;
-      needRedraw = true;
-      return;
-    }
-
-    if (settingsTab == SettingsTab::Connection) {
-      if (y >= 122 && y <= 150 && x >= 8 && x <= scrW(rot) - 8) {
-        settings.screenRotation = (settings.screenRotation + 1) & 3;
-        store.save(settings);
-        applyScreenRotation();
-        statusMsg = rotationLabel(settings.screenRotation);
-        needRedraw = true;
-        return;
-      }
-      if (y >= 154 && y <= 182) {
-        page = Page::PickLayout;
-        needRedraw = true;
-        return;
-      }
-      if (y >= 186 && y <= 214) {
-        page = Page::PickTheme;
-        needRedraw = true;
-        return;
-      }
-      if (y >= 218 && y <= 246 && x >= 8 && x <= scrW(rot) - 8) {
-        page = Page::PinSet;
-        pinSetPhase = 0;
-        pinSetFirst = "";
-        pinEntry = "";
-        pinStatus = "New PIN (4 digits)";
-        needRedraw = true;
-        return;
-      }
-      int w = scrW(rot);
-      int cardW = w - 16;
-      if (y >= 248 && y <= 272 && x >= 8 && x <= 8 + cardW / 2 - 4) {
-        startHostDiscovery();
-        return;
-      }
-      if (y >= 248 && y <= 272 && x >= 8 + cardW / 2 + 4) {
-        openManualHost();
-        return;
-      }
-      if (y >= 276 && y <= 300) {
-        page = Page::WifiPick;
-        startWifiScan();
-        return;
-      }
-    } else {
-      if (y >= 140 && y <= 168) {
-        settings.checkForUpdate = !settings.checkForUpdate;
-        if (!settings.checkForUpdate) settings.autoInstallUpdate = false;
-        store.save(settings);
-        gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
-                         settings.autoInstallUpdate);
-        needRedraw = true;
-        return;
-      }
-      if (y >= 172 && y <= 200) {
-        settings.autoInstallUpdate = !settings.autoInstallUpdate;
-        if (settings.autoInstallUpdate) settings.checkForUpdate = true;
-        store.save(settings);
-        gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
-                         settings.autoInstallUpdate);
-        needRedraw = true;
-        return;
-      }
-      if (y >= 204 && y <= 232) {
-        settings.gridOfflineAlert = !settings.gridOfflineAlert;
-        store.save(settings);
-        needRedraw = true;
-        return;
-      }
-      if (y >= 236 && y <= 264) {
-        settings.useHostConfig = !settings.useHostConfig;
-        store.save(settings);
-        if (settings.useHostConfig) pollDisplayConfig(true);
-        needRedraw = true;
-        return;
-      }
-    }
-  }
-
-  if (page == Page::WifiPick) {
-    int idx = 0;
-    bool rescan = false;
-    bool phone = false;
-    bool back = false;
-    if (ui.wifiNetworkAt(x, y, wifiScroll, (int)wifiNets.size(), idx, rescan, phone, back, rot)) {
-      if (back) {
-        page = Page::Settings;
-        statusMsg = wifiStatus;
-        needRedraw = true;
-        return;
-      }
-      if (rescan) {
-        startWifiScan();
-        return;
-      }
-      if (phone) {
-        statusMsg = "Opening phone portal...";
-        needRedraw = true;
-        if (ensureWifi(true)) {
-          statusMsg = "WiFi OK " + WiFi.localIP().toString();
-          page = Page::Settings;
-        } else {
-          statusMsg = "Portal cancelled";
-        }
-        needRedraw = true;
-        return;
-      }
-      if (idx >= 0 && idx < (int)wifiNets.size()) {
-        wifiSelected = idx;
-        wifiPickSsid = wifiNets[idx].ssid;
-        if (!wifiNets[idx].secure) {
-          if (connectPickedWifi(wifiPickSsid, "")) {
-            statusMsg = wifiStatus;
-            page = settings.hostIp.length() ? Page::Glance : Page::HostChoice;
-          } else {
-            page = Page::WifiPick;
-          }
-        } else {
-          wifiPassword = "";
-          wifiShowPass = false;
-          wifiShift = false;
-          wifiStatus = "Enter password";
-          page = Page::WifiPassword;
-        }
-        needRedraw = true;
-      }
-    }
-    return;
-  }
-
-  if (page == Page::WifiPassword) {
-    char ch = 0;
-    bool backspace = false;
-    bool shiftKey = false;
-    bool space = false;
-    bool showPass = false;
-    bool connect = false;
-    bool back = false;
-    if (ui.wifiPasswordAt(x, y, wifiShift, ch, backspace, shiftKey, space, showPass, connect, back, rot)) {
-      if (back) {
-        page = Page::WifiPick;
-        wifiStatus = "Tap your network";
-        needRedraw = true;
-        return;
-      }
-      if (shiftKey) {
-        wifiShift = !wifiShift;
-        needRedraw = true;
-        return;
-      }
-      if (showPass) {
-        wifiShowPass = !wifiShowPass;
-        needRedraw = true;
-        return;
-      }
-      if (backspace && wifiPassword.length()) {
-        wifiPassword.remove(wifiPassword.length() - 1);
-        needRedraw = true;
-        return;
-      }
-      if (space) {
-        wifiPassword += ' ';
-        needRedraw = true;
-        return;
-      }
-      if (ch) {
-        if (wifiPassword.length() < 63) wifiPassword += ch;
-        needRedraw = true;
-        return;
-      }
-      if (connect) {
-        if (connectPickedWifi(wifiPickSsid, wifiPassword)) {
-          statusMsg = wifiStatus;
-          page = settings.hostIp.length() ? Page::Glance : Page::HostChoice;
-        } else {
-          page = Page::WifiPassword;
-        }
-        needRedraw = true;
-        return;
-      }
-    }
-    return;
-  }
-
-  if (page == Page::PinUnlock || page == Page::PinSet) {
-    int digit = -1;
-    bool del = false;
-    bool ok = false;
-    bool back = false;
-    if (ui.pinPadAt(x, y, digit, del, ok, back, rot)) {
-      if (back) {
-        pinEntry = "";
-        page = (page == Page::PinSet) ? Page::Settings : Page::Glance;
-        needRedraw = true;
-        return;
-      }
-      if (del && pinEntry.length()) {
-        pinEntry.remove(pinEntry.length() - 1);
-        needRedraw = true;
-        return;
-      }
-      if (digit >= 0 && pinEntry.length() < 4) {
-        pinEntry += String(digit);
-        needRedraw = true;
-        if (pinEntry.length() == 4 && ok) handlePinPadCommon(page == Page::PinSet);
-        return;
-      }
-      if (ok) {
-        if (page == Page::PinSet && pinEntry.length() == 0) {
-          handlePinPadCommon(true);
-          return;
-        }
-        if (pinEntry.length() == 4) handlePinPadCommon(page == Page::PinSet);
-        return;
-      }
-    }
-    return;
   }
 }
 
@@ -880,17 +786,18 @@ void setup() {
 
   tft.init();
   applyScreenRotation();
-  ui.setTheme(settings.themeId);
   setBrightness(settings.brightness);
-  ui.begin(tft);
-  ui.drawSplash(tft, "Starting...");
+  ui.begin(tft, settings.screenRotation);
+  ui.setTheme(settings.themeId);
+  uiActionsSetHandler(handleUiAction);
+  ui.showSplash("Starting...");
 
   gitOta.begin();
   gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
                    settings.autoInstallUpdate);
 
   if (ensureWifi(false)) {
-    ui.drawSplash(tft, WiFi.localIP().toString().c_str());
+    ui.showSplash(WiFi.localIP().toString().c_str());
     deviceWeb.applySettings(settings);
     deviceWeb.begin();
     ui.ensureClock();
@@ -898,19 +805,20 @@ void setup() {
       struct tm ti;
       uint32_t t0 = millis();
       while (millis() - t0 < 3000) {
+        lvglPortTick();
         if (getLocalTime(&ti)) break;
-        delay(200);
+        delay(20);
       }
     }
     delay(400);
   } else {
-    page = Page::WifiPick;
+    page = UiPage::WifiPick;
     startWifiScan();
     delay(400);
   }
 
-  if (page != Page::WifiPick && page != Page::WifiPassword) {
-    page = Page::Glance;
+  if (page != UiPage::WifiPick && page != UiPage::WifiPassword) {
+    page = UiPage::Glance;
     statusMsg = settings.hostIp;
   }
 
@@ -920,7 +828,7 @@ void setup() {
 }
 
 void loop() {
-  handleTouch();
+  ui.tick();
 
   if (gDeviceWebSaved) {
     gDeviceWebSaved = false;
@@ -936,14 +844,14 @@ void loop() {
   gitOta.loop();
   otaStatus = gitOta.status();
 
-  if (page == Page::FindingHost && discovery.isSearching()) {
+  if (page == UiPage::FindingHost && discovery.isSearching()) {
     if (discovery.tickSearch(api, settings.token, found)) {
       finishHostDiscovery();
     }
   }
 
   static bool wasStale = false;
-  bool stale = (lastGood == 0) || (millis() - lastGood > STALE_MS);
+  const bool stale = (lastGood == 0) || (millis() - lastGood > STALE_MS);
   if (stale != wasStale) {
     wasStale = stale;
     needRedraw = true;
@@ -953,70 +861,21 @@ void loop() {
   pollDisplayConfig(false);
 
   static uint32_t lastClock = 0;
-  if (page == Page::Glance && WiFi.status() == WL_CONNECTED && millis() - lastClock >= 30000) {
+  if (page == UiPage::Glance && WiFi.status() == WL_CONNECTED && millis() - lastClock >= 30000) {
     lastClock = millis();
     ui.ensureClock();
-    ui.refreshHeaderTime(tft, glance);
+    ui.refreshHeaderTime(glance);
   }
 
-  if (page == Page::Glance && glanceGridAlert(glance) && millis() - lastAnim >= 500) {
+  if (page == UiPage::Glance && glanceGridAlert(glance) && millis() - lastAnim >= 500) {
     lastAnim = millis();
-    ui.drawGlanceGridPulse(tft, glance, millis(), settings.gridOfflineAlert);
+    ui.pulseGlanceGrid(settings.gridOfflineAlert, millis());
   }
 
   if (needRedraw) {
     needRedraw = false;
-    switch (page) {
-      case Page::Glance:
-        ui.drawGlance(tft, glance, stale, millis(), settings.glanceLayout, settings.gridOfflineAlert);
-        break;
-      case Page::Bms:
-        ui.drawBms(tft, bms);
-        break;
-      case Page::History:
-        ui.drawHistory(tft, history);
-        break;
-      case Page::Settings:
-      case Page::SettingsConn:
-      case Page::SettingsUpdates:
-        ui.drawSettings(tft, settings, WiFi.status() == WL_CONNECTED, WiFi.SSID(),
-                        settingsTab == SettingsTab::Updates ? otaStatus : statusMsg, settingsTab);
-        break;
-      case Page::PickLayout:
-        ui.drawPickList(tft, "Layout", kLayoutNames, 5, settings.glanceLayout);
-        break;
-      case Page::PickTheme:
-        ui.drawPickList(tft, "Theme", kThemeNames, 5, settings.themeId);
-        break;
-      case Page::FindingHost:
-        ui.drawFindingHost(tft, statusMsg);
-        break;
-      case Page::HostChoice:
-        ui.drawHostChoice(tft, WiFi.SSID());
-        break;
-      case Page::ManualHost:
-        ui.drawManualHost(tft, manualOctets, manualSel, settings.hostPort, statusMsg);
-        break;
-      case Page::WifiPick:
-        ui.drawWifiNetworks(tft, wifiNets, wifiScroll, wifiSelected, wifiStatus);
-        break;
-      case Page::WifiPassword:
-        ui.drawWifiPassword(tft, wifiPickSsid, wifiPassword, wifiShowPass, wifiShift, wifiStatus);
-        break;
-      case Page::PinUnlock:
-        ui.drawPinPad(tft, "Settings locked", pinEntry, "Enter 4-digit PIN", pinStatus);
-        break;
-      case Page::PinSet:
-        ui.drawPinPad(tft, "Settings PIN", pinEntry, pinSetPhase ? "Confirm PIN" : "New PIN (4 digits)", pinStatus);
-        break;
-    }
+    refreshCurrentPage();
   }
 
-#if TOUCH_SHOW_DEBUG
-  if (lastTouch.active && millis() - lastTouchAt < 3000) {
-    ui.drawTouchDebug(tft, lastTouch);
-  }
-#endif
-
-  delay(20);
+  delay(5);
 }

@@ -17,8 +17,10 @@ def rgb888_to_rgb565(r: int, g: int, b: int) -> int:
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
 
-def convert(png_path: Path, out_path: Path) -> None:
+def convert(png_path: Path, out_path: Path, size: int | None = None) -> None:
     img = Image.open(png_path).convert("RGB")
+    if size is not None and (img.width != size or img.height != size):
+        img = img.resize((size, size), Image.Resampling.LANCZOS)
     w, h = img.size
 
     pixels: list[int] = []
@@ -57,12 +59,13 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--png", type=Path, default=default_png)
     p.add_argument("--out", type=Path, default=default_out)
+    p.add_argument("--size", type=int, default=None, help="Optional square resize (e.g. 24 for small icons)")
     args = p.parse_args()
 
     if not args.png.is_file():
         print(f"Missing PNG: {args.png}", file=sys.stderr)
         sys.exit(1)
-    convert(args.png, args.out)
+    convert(args.png, args.out, size=args.size)
 
 
 if __name__ == "__main__":

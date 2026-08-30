@@ -9,9 +9,9 @@ Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/sola
   <img src="docs/esp32-glance-ui.png" alt="Early design concept — see layout below for the actual firmware UI" width="320"/>
 </p>
 
-> The photo above is an **early design mockup**. The firmware UI is simpler and matches the layout below (dark theme, text labels `PV` / `LD` / `GR`, bottom tab bar).
+> The photo above is an **early design mockup**. Firmware **v0.3.0+** uses **LVGL** for card-based UI aligned with the web dashboard mockups (themes, layouts, animated SOC/grid alert).
 
-**Actual Glance screen (portrait 240×320):**
+**Actual Glance screen (portrait 240×320, LVGL):**
 
 ```text
 ┌──────────────────────────────┐
@@ -223,7 +223,7 @@ All can poll the same solar-monitoring host — the APIs are stateless.
   Glance payload includes `clock`, `timezone`, `tz_offset_sec`, and `weather` (Open-Meteo, cached on the host).  
   The display uses the host timezone for NTP and shows the server `clock` string in the header.
 - Discovery: mDNS service `_solar-monitoring._tcp` (TXT includes `api_version`, paths)  
-- Stack: PlatformIO, TFT_eSPI, ArduinoJson, WiFiManager, XPT2046  
+- Stack: PlatformIO, **LVGL 8.x**, TFT_eSPI (display flush), ArduinoJson, WiFiManager, XPT2046  
 
 **Split to its own repo:** copy this folder; keep the HTTP + mDNS contract documented — no Python code is required in that repo.
 
