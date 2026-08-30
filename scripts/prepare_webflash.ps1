@@ -29,7 +29,7 @@ foreach ($f in $files) {
 $bootApp = Get-ChildItem -Path (Join-Path $Root ".pio\packages") -Recurse -Filter "boot_app0.bin" -ErrorAction SilentlyContinue |
   Select-Object -First 1
 if (-not $bootApp) {
-  throw "boot_app0.bin not found under .pio/packages — run pio run once."
+  throw "boot_app0.bin not found under .pio/packages - run pio run once."
 }
 Copy-Item -Force $bootApp.FullName (Join-Path $Out "boot_app0.bin")
 Write-Host "Copied boot_app0.bin from $($bootApp.FullName)"
