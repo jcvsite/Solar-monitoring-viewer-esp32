@@ -14,7 +14,9 @@ class DeviceWeb {
  private:
   void handleRoot();
   void handleSave();
+  void handleUnlock();
   String htmlPage() const;
+  String htmlPinGate() const;
   HostSettings settings_;
   bool started_ = false;
 };

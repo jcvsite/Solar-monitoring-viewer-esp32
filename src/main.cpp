@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include <time.h>
+#include <vector>
 #include <TFT_eSPI.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -17,6 +18,7 @@
 #include "layout.h"
 #include "git_ota.h"
 #include "device_web.h"
+#include "wifi_setup.h"
 
 #ifndef FW_VERSION
 #define FW_VERSION "0.0.0"
@@ -48,6 +50,22 @@ int foundIndex = 0;
 uint8_t manualOctets[4] = {192, 168, 1, 240};
 uint8_t manualSel = 0;
 
+std::vector<WifiNetwork> wifiNets;
+int wifiScroll = 0;
+int wifiSelected = 0;
+String wifiPickSsid;
+String wifiPassword;
+bool wifiShowPass = false;
+bool wifiShift = false;
+String wifiStatus;
+
+bool settingsPinUnlocked = false;
+String pinEntry;
+String pinStatus;
+String pinSetFirst;
+uint8_t pinSetPhase = 0;
+Page pinReturnPage = Page::Glance;
+
 static const char* kLayoutNames[] = {"Classic", "Compact", "Ring", "Bars", "Flow"};
 static const char* kThemeNames[] = {"Dark", "Light", "Solar", "Ocean", "Forest"};
 
@@ -68,6 +86,36 @@ static const char* rotationLabel(uint8_t r) {
 }
 
 static void applyHostSettingsFromConfig(const DisplayConfig& cfg);
+
+static void startWifiScan() {
+  wifiStatus = "Scanning...";
+  needRedraw = true;
+  ui.drawWifiNetworks(tft, wifiNets, wifiScroll, wifiSelected, wifiStatus);
+  if (wifiScanNetworks(wifiNets)) {
+    wifiScroll = 0;
+    wifiSelected = 0;
+    wifiStatus = "Tap your network";
+  } else {
+    wifiNets.clear();
+    wifiStatus = "No networks — tap Rescan";
+  }
+  needRedraw = true;
+}
+
+static bool connectPickedWifi(const String& ssid, const String& pass) {
+  wifiStatus = "Connecting...";
+  needRedraw = true;
+  ui.drawSplash(tft, wifiStatus.c_str());
+  if (!wifiConnectAndSave(ssid.c_str(), pass.c_str())) {
+    wifiStatus = "Failed — check password";
+    return false;
+  }
+  wifiStatus = "Connected " + WiFi.localIP().toString();
+  deviceWeb.applySettings(settings);
+  deviceWeb.begin();
+  ui.ensureClock();
+  return true;
+}
 
 static bool nearEq(float a, float b) {
   if (isnan(a) && isnan(b)) return true;
@@ -214,9 +262,21 @@ static bool ensureWifi(bool forcePortal) {
   WiFiManager wm;
   wm.setDebugOutput(false);
   wm.setConfigPortalTimeout(300);
+  wm.setConnectTimeout(30);
   wm.setAPCallback(configModeCallback);
   wm.setTitle("Solar Display WiFi");
   wm.setHostname(hostname.c_str());
+  wm.setCustomHeadElement(
+      "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+      "<style>"
+      "body{font-family:system-ui,sans-serif;background:#111;color:#eee;padding:12px;max-width:420px;margin:auto}"
+      "input,select{font-size:18px;padding:12px;width:100%;box-sizing:border-box;margin:8px 0;"
+      "border-radius:8px;border:1px solid #444;background:#1c1c1e;color:#fff}"
+      "button,.btn{font-size:18px;padding:12px 16px;border-radius:8px;border:0;background:#0a84ff;color:#fff;"
+      "width:100%;margin-top:12px;cursor:pointer}"
+      "h1{font-size:1.35rem} label{font-weight:600;display:block;margin-top:10px}"
+      ".msg{padding:10px;border-radius:8px;background:#1c1c1e;margin:10px 0}"
+      "</style>");
 
   if (forcePortal) {
     ui.drawWifiPortal(tft, gPortalApName.c_str());
@@ -242,6 +302,79 @@ static bool ensureWifi(bool forcePortal) {
     ok = wm.autoConnect(gPortalApName.c_str());
   }
   return ok && WiFi.status() == WL_CONNECTED;
+}
+
+static bool pinIsSet() { return settings.settingsPin.length() == 4; }
+
+static void openSettingsPage() {
+  if (pinIsSet() && !settingsPinUnlocked) {
+    page = Page::PinUnlock;
+    pinEntry = "";
+    pinStatus = "Enter PIN";
+    pinReturnPage = Page::Settings;
+    needRedraw = true;
+    return;
+  }
+  page = Page::Settings;
+  settingsTab = SettingsTab::Connection;
+  settingsPinUnlocked = true;
+  pollIfDue(true);
+  needRedraw = true;
+}
+
+static void handlePinPadCommon(bool forSet) {
+  if (forSet) {
+    if (pinEntry.length() == 0) {
+      settings.settingsPin = "";
+      store.save(settings);
+      deviceWeb.applySettings(settings);
+      pinSetPhase = 0;
+      pinSetFirst = "";
+      pinStatus = "PIN disabled";
+      page = Page::Settings;
+      needRedraw = true;
+      return;
+    }
+    if (pinEntry.length() != 4) return;
+    if (pinSetPhase == 0) {
+      pinSetFirst = pinEntry;
+      pinEntry = "";
+      pinSetPhase = 1;
+      pinStatus = "Confirm PIN";
+      needRedraw = true;
+      return;
+    }
+    if (pinEntry != pinSetFirst) {
+      pinEntry = "";
+      pinSetPhase = 0;
+      pinSetFirst = "";
+      pinStatus = "No match — retry";
+      needRedraw = true;
+      return;
+    }
+    settings.settingsPin = pinEntry;
+    store.save(settings);
+    deviceWeb.applySettings(settings);
+    pinEntry = "";
+    pinSetPhase = 0;
+    pinSetFirst = "";
+    pinStatus = "PIN saved";
+    page = Page::Settings;
+    needRedraw = true;
+    return;
+  }
+  if (pinEntry.length() != 4) return;
+  if (pinEntry == settings.settingsPin) {
+    settingsPinUnlocked = true;
+    pinEntry = "";
+    page = pinReturnPage;
+    pinStatus = "";
+    needRedraw = true;
+  } else {
+    pinEntry = "";
+    pinStatus = "Wrong PIN";
+    needRedraw = true;
+  }
 }
 
 static void applyHostSettingsFromConfig(const DisplayConfig& cfg) {
@@ -283,6 +416,10 @@ static void applyHostSettingsFromConfig(const DisplayConfig& cfg) {
   }
   if (settings.gridOfflineAlert != cfg.grid_offline_alert) {
     settings.gridOfflineAlert = cfg.grid_offline_alert;
+    changed = true;
+  }
+  if (settings.useHostConfig && cfg.settings_pin != settings.settingsPin) {
+    settings.settingsPin = cfg.settings_pin;
     changed = true;
   }
   gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
@@ -377,6 +514,11 @@ static void handleTouch() {
 
   Page navPage;
   if (ui.navPageAt(x, y, navPage, rot) && (uint8_t)page <= (uint8_t)Page::Settings) {
+    if (navPage == Page::Settings) {
+      openSettingsPage();
+      return;
+    }
+    settingsPinUnlocked = false;
     page = navPage;
     settingsTab = SettingsTab::Connection;
     pollIfDue(true);
@@ -527,25 +669,28 @@ static void handleTouch() {
         needRedraw = true;
         return;
       }
+      if (y >= 218 && y <= 246 && x >= 8 && x <= scrW(rot) - 8) {
+        page = Page::PinSet;
+        pinSetPhase = 0;
+        pinSetFirst = "";
+        pinEntry = "";
+        pinStatus = "New PIN (4 digits)";
+        needRedraw = true;
+        return;
+      }
       int w = scrW(rot);
       int cardW = w - 16;
-      if (y >= 220 && y <= 248 && x >= 8 && x <= 8 + cardW / 2 - 4) {
+      if (y >= 248 && y <= 272 && x >= 8 && x <= 8 + cardW / 2 - 4) {
         startHostDiscovery();
         return;
       }
-      if (y >= 220 && y <= 248 && x >= 8 + cardW / 2 + 4) {
+      if (y >= 248 && y <= 272 && x >= 8 + cardW / 2 + 4) {
         openManualHost();
         return;
       }
-      if (y >= 254 && y <= 282) {
-        statusMsg = "Opening portal...";
-        needRedraw = true;
-        if (ensureWifi(true)) {
-          statusMsg = "WiFi OK " + WiFi.localIP().toString();
-        } else {
-          statusMsg = "WiFi setup cancelled";
-        }
-        needRedraw = true;
+      if (y >= 276 && y <= 300) {
+        page = Page::WifiPick;
+        startWifiScan();
         return;
       }
     } else {
@@ -581,6 +726,146 @@ static void handleTouch() {
         return;
       }
     }
+  }
+
+  if (page == Page::WifiPick) {
+    int idx = 0;
+    bool rescan = false;
+    bool phone = false;
+    bool back = false;
+    if (ui.wifiNetworkAt(x, y, wifiScroll, (int)wifiNets.size(), idx, rescan, phone, back, rot)) {
+      if (back) {
+        page = Page::Settings;
+        statusMsg = wifiStatus;
+        needRedraw = true;
+        return;
+      }
+      if (rescan) {
+        startWifiScan();
+        return;
+      }
+      if (phone) {
+        statusMsg = "Opening phone portal...";
+        needRedraw = true;
+        if (ensureWifi(true)) {
+          statusMsg = "WiFi OK " + WiFi.localIP().toString();
+          page = Page::Settings;
+        } else {
+          statusMsg = "Portal cancelled";
+        }
+        needRedraw = true;
+        return;
+      }
+      if (idx >= 0 && idx < (int)wifiNets.size()) {
+        wifiSelected = idx;
+        wifiPickSsid = wifiNets[idx].ssid;
+        if (!wifiNets[idx].secure) {
+          if (connectPickedWifi(wifiPickSsid, "")) {
+            statusMsg = wifiStatus;
+            page = settings.hostIp.length() ? Page::Glance : Page::HostChoice;
+          } else {
+            page = Page::WifiPick;
+          }
+        } else {
+          wifiPassword = "";
+          wifiShowPass = false;
+          wifiShift = false;
+          wifiStatus = "Enter password";
+          page = Page::WifiPassword;
+        }
+        needRedraw = true;
+      }
+    }
+    return;
+  }
+
+  if (page == Page::WifiPassword) {
+    char ch = 0;
+    bool backspace = false;
+    bool shiftKey = false;
+    bool space = false;
+    bool showPass = false;
+    bool connect = false;
+    bool back = false;
+    if (ui.wifiPasswordAt(x, y, wifiShift, ch, backspace, shiftKey, space, showPass, connect, back, rot)) {
+      if (back) {
+        page = Page::WifiPick;
+        wifiStatus = "Tap your network";
+        needRedraw = true;
+        return;
+      }
+      if (shiftKey) {
+        wifiShift = !wifiShift;
+        needRedraw = true;
+        return;
+      }
+      if (showPass) {
+        wifiShowPass = !wifiShowPass;
+        needRedraw = true;
+        return;
+      }
+      if (backspace && wifiPassword.length()) {
+        wifiPassword.remove(wifiPassword.length() - 1);
+        needRedraw = true;
+        return;
+      }
+      if (space) {
+        wifiPassword += ' ';
+        needRedraw = true;
+        return;
+      }
+      if (ch) {
+        if (wifiPassword.length() < 63) wifiPassword += ch;
+        needRedraw = true;
+        return;
+      }
+      if (connect) {
+        if (connectPickedWifi(wifiPickSsid, wifiPassword)) {
+          statusMsg = wifiStatus;
+          page = settings.hostIp.length() ? Page::Glance : Page::HostChoice;
+        } else {
+          page = Page::WifiPassword;
+        }
+        needRedraw = true;
+        return;
+      }
+    }
+    return;
+  }
+
+  if (page == Page::PinUnlock || page == Page::PinSet) {
+    int digit = -1;
+    bool del = false;
+    bool ok = false;
+    bool back = false;
+    if (ui.pinPadAt(x, y, digit, del, ok, back, rot)) {
+      if (back) {
+        pinEntry = "";
+        page = (page == Page::PinSet) ? Page::Settings : Page::Glance;
+        needRedraw = true;
+        return;
+      }
+      if (del && pinEntry.length()) {
+        pinEntry.remove(pinEntry.length() - 1);
+        needRedraw = true;
+        return;
+      }
+      if (digit >= 0 && pinEntry.length() < 4) {
+        pinEntry += String(digit);
+        needRedraw = true;
+        if (pinEntry.length() == 4 && ok) handlePinPadCommon(page == Page::PinSet);
+        return;
+      }
+      if (ok) {
+        if (page == Page::PinSet && pinEntry.length() == 0) {
+          handlePinPadCommon(true);
+          return;
+        }
+        if (pinEntry.length() == 4) handlePinPadCommon(page == Page::PinSet);
+        return;
+      }
+    }
+    return;
   }
 }
 
@@ -619,14 +904,15 @@ void setup() {
     }
     delay(400);
   } else {
-    ui.drawSplash(tft, "No WiFi — use Settings");
-    page = Page::Settings;
-    statusMsg = "Tap WIFI SETUP";
-    delay(1000);
+    page = Page::WifiPick;
+    startWifiScan();
+    delay(400);
   }
 
-  page = Page::Glance;
-  statusMsg = settings.hostIp;
+  if (page != Page::WifiPick && page != Page::WifiPassword) {
+    page = Page::Glance;
+    statusMsg = settings.hostIp;
+  }
 
   pollDisplayConfig(true);
   pollIfDue(true);
@@ -710,6 +996,18 @@ void loop() {
         break;
       case Page::ManualHost:
         ui.drawManualHost(tft, manualOctets, manualSel, settings.hostPort, statusMsg);
+        break;
+      case Page::WifiPick:
+        ui.drawWifiNetworks(tft, wifiNets, wifiScroll, wifiSelected, wifiStatus);
+        break;
+      case Page::WifiPassword:
+        ui.drawWifiPassword(tft, wifiPickSsid, wifiPassword, wifiShowPass, wifiShift, wifiStatus);
+        break;
+      case Page::PinUnlock:
+        ui.drawPinPad(tft, "Settings locked", pinEntry, "Enter 4-digit PIN", pinStatus);
+        break;
+      case Page::PinSet:
+        ui.drawPinPad(tft, "Settings PIN", pinEntry, pinSetPhase ? "Confirm PIN" : "New PIN (4 digits)", pinStatus);
         break;
     }
   }

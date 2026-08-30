@@ -1,6 +1,8 @@
 #pragma once
 #include <TFT_eSPI.h>
+#include <vector>
 #include "api_client.h"
+#include "wifi_setup.h"
 #include "touch_input.h"
 #include "settings_store.h"
 
@@ -15,7 +17,11 @@ enum class Page : uint8_t {
   PickTheme = 7,
   FindingHost = 8,
   ManualHost = 9,
-  HostChoice = 10
+  HostChoice = 10,
+  WifiPick = 11,
+  WifiPassword = 12,
+  PinUnlock = 13,
+  PinSet = 14
 };
 
 enum class SettingsTab : uint8_t { Connection = 0, Updates = 1 };
@@ -57,6 +63,18 @@ class Ui {
   void drawTouchDebug(TFT_eSPI& tft, const TouchSample& s);
   void drawSplash(TFT_eSPI& tft, const char* msg);
   void drawWifiPortal(TFT_eSPI& tft, const char* apName);
+  void drawWifiNetworks(TFT_eSPI& tft, const std::vector<WifiNetwork>& nets, int scroll, int selected,
+                        const String& status);
+  void drawWifiPassword(TFT_eSPI& tft, const String& ssid, const String& password, bool showPass,
+                        bool shift, const String& status);
+  bool wifiNetworkAt(int16_t x, int16_t y, int scroll, int count, int& index, bool& rescan, bool& phone,
+                     bool& back, uint8_t rotation);
+  bool wifiPasswordAt(int16_t x, int16_t y, bool shift, char& outChar, bool& backspace, bool& shiftKey, bool& space,
+                      bool& showPass, bool& connect, bool& back, uint8_t rotation);
+
+  void drawPinPad(TFT_eSPI& tft, const char* title, const String& entry, const String& subtitle,
+                  const String& status);
+  bool pinPadAt(int16_t x, int16_t y, int& digit, bool& del, bool& ok, bool& back, uint8_t rotation);
 
   String fmtPower(float w);
   String fmtKwh(float k);

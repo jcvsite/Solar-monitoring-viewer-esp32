@@ -162,6 +162,12 @@ bool ApiClient::fetchDisplayConfig(const String& host, uint16_t port, const Stri
   out.grid_offline_alert = doc["grid_offline_alert"] | true;
   out.force_update = doc["force_update"] | false;
   out.force_update_version = doc["force_update_version"] | "";
+  out.settings_pin_set = doc["settings_pin_set"] | false;
+  if (doc["settings_pin"].is<const char*>()) {
+    out.settings_pin = doc["settings_pin"].as<const char*>();
+  }
+  if (out.settings_pin.length() != 4) out.settings_pin = "";
+  if (out.settings_pin.length() == 4) out.settings_pin_set = true;
   if (out.auto_install_update) out.check_for_update = true;
   return out.ok;
 }

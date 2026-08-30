@@ -4,6 +4,7 @@
 #include "theme.h"
 #include "cell_colors.h"
 #include "glance_layouts.h"
+#include "logo_solar_monitoring.h"
 #include <cstdio>
 #include <math.h>
 #include <time.h>
@@ -13,6 +14,13 @@
 #endif
 
 static const ThemePalette& th() { return themeActive(); }
+
+static void drawBrandLogo(TFT_eSPI& tft, int centerX, int centerY) {
+  int x = centerX - LOGO_SOLAR_MONITORING_W / 2;
+  int y = centerY - LOGO_SOLAR_MONITORING_H / 2;
+  tft.pushImage(x, y, LOGO_SOLAR_MONITORING_W, LOGO_SOLAR_MONITORING_H,
+                logo_solar_monitoring, LOGO_SOLAR_MONITORING_KEY);
+}
 
 void Ui::setTheme(uint8_t themeId) {
   themeSetActive(themeId);
@@ -30,33 +38,35 @@ void Ui::drawSplash(TFT_eSPI& tft, const char* msg) {
   int w = scrW(rotation_);
   int h = scrH(rotation_);
   tft.fillScreen(th().bg);
+  drawBrandLogo(tft, w / 2, h / 2 - 36);
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(th().text, th().bg);
-  tft.drawString("Solar Monitoring", w / 2, h / 2 - 24, 4);
+  tft.drawString("Solar Monitoring", w / 2, h / 2 + 44, 4);
   tft.setTextColor(th().pv, th().bg);
-  tft.drawString("Viewer", w / 2, h / 2 + 8, 4);
+  tft.drawString("Viewer", w / 2, h / 2 + 76, 4);
   tft.setTextColor(th().muted, th().bg);
-  tft.drawString(msg, w / 2, h / 2 + 48, 2);
+  tft.drawString(msg, w / 2, h / 2 + 112, 2);
 }
 
 void Ui::drawWifiPortal(TFT_eSPI& tft, const char* apName) {
   int w = scrW(rotation_);
   int h = scrH(rotation_);
   tft.fillScreen(th().bg);
+  drawBrandLogo(tft, w / 2, 52);
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(th().text, th().bg);
-  tft.drawString("WiFi Setup", w / 2, 50, 4);
+  tft.drawString("Phone WiFi Setup", w / 2, 108, 4);
   tft.setTextColor(th().muted, th().bg);
-  tft.drawString("1. Join WiFi AP:", w / 2, 100, 2);
+  tft.drawString("1. Join WiFi AP:", w / 2, 138, 2);
   tft.setTextColor(th().text, th().bg);
-  tft.drawString(apName, w / 2, 125, 2);
+  tft.drawString(apName, w / 2, 158, 2);
   tft.setTextColor(th().muted, th().bg);
-  tft.drawString("2. Open browser:", w / 2, 165, 2);
+  tft.drawString("2. Browser opens (or go to):", w / 2, 186, 2);
   tft.setTextColor(th().pv, th().bg);
-  tft.drawString("192.168.4.1", w / 2, 190, 4);
+  tft.drawString("192.168.4.1", w / 2, 208, 4);
   tft.setTextColor(th().muted, th().bg);
-  tft.drawString("Pick your home WiFi + password", w / 2, min(h - 40, 230), 2);
-  tft.drawString("Waiting...", w / 2, min(h - 20, 270), 2);
+  tft.drawString("Pick network + password, Save", w / 2, min(h - 52, 238), 2);
+  tft.drawString("Tip: use touch WiFi on device instead", w / 2, min(h - 28, 262), 1);
 }
 
 void Ui::fillHeader(TFT_eSPI& tft, const String& titleLeft, const String& titleRight, uint8_t rotation) {
@@ -470,11 +480,12 @@ void Ui::drawSettingsConnection(TFT_eSPI& tft, const HostSettings& s, bool wifiO
   row(122, "Rotation", rotationLabel(s.screenRotation));
   row(154, "Layout", kLayoutNames[s.glanceLayout]);
   row(186, "Theme", themeName(s.themeId));
+  row(218, "Settings PIN", s.settingsPin.length() == 4 ? "****" : "Off");
 
-  const int btnH = 28;
-  drawSettingsBtn(tft, 8, 220, cardW / 2 - 4, btnH, "Find", th().card, th().grid);
-  drawSettingsBtn(tft, 8 + cardW / 2 + 4, 220, cardW / 2 - 4, btnH, "Manual", th().card, th().pv);
-  drawSettingsBtn(tft, 8, 254, cardW, btnH, "WiFi Setup", th().card, th().text);
+  const int btnH = 24;
+  drawSettingsBtn(tft, 8, 248, cardW / 2 - 4, btnH, "Find", th().card, th().grid);
+  drawSettingsBtn(tft, 8 + cardW / 2 + 4, 248, cardW / 2 - 4, btnH, "Manual", th().card, th().pv);
+  drawSettingsBtn(tft, 8, 276, cardW, btnH, "WiFi Setup", th().card, th().text);
 
   tft.setTextDatum(TC_DATUM);
   tft.setTextColor(th().muted, th().bg);
@@ -638,4 +649,373 @@ void Ui::drawManualHost(TFT_eSPI& tft, const uint8_t octets[4], uint8_t selected
   tft.drawString("BACK", w / 2, 265, 2);
   tft.setTextColor(th().muted, th().bg);
   tft.drawString(statusMsg, w / 2, scrH(rotation_) - 25, 1);
+}
+
+static void drawKeyRow(TFT_eSPI& tft, int y, int w, const char* keys, int count, bool shift, uint16_t bg,
+                       uint16_t fg) {
+  const int gap = 2;
+  const int margin = 4;
+  int total = w - margin * 2 - gap * (count - 1);
+  int kw = total / count;
+  for (int i = 0; i < count; i++) {
+    int x = margin + i * (kw + gap);
+    tft.fillRoundRect(x, y, kw, 24, 4, bg);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(fg, bg);
+    char label[2] = {0, 0};
+    char c = keys[i];
+    if (c >= 'a' && c <= 'z' && shift) c = (char)(c - 32);
+    label[0] = c;
+    tft.drawString(label, x + kw / 2, y + 12, 2);
+  }
+}
+
+static void drawWideKey(TFT_eSPI& tft, int x, int y, int kw, int kh, const char* label, uint16_t bg,
+                        uint16_t fg) {
+  tft.fillRoundRect(x, y, kw, kh, 4, bg);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(fg, bg);
+  tft.drawString(label, x + kw / 2, y + kh / 2, 2);
+}
+
+void Ui::drawWifiNetworks(TFT_eSPI& tft, const std::vector<WifiNetwork>& nets, int scroll, int selected,
+                          const String& status) {
+  uint8_t rot = rotation_;
+  int w = scrW(rot);
+  int ny = navY(rot);
+  const int itemH = 32;
+  const int visible = 5;
+  tft.fillScreen(th().bg);
+  fillHeader(tft, "WiFi", "Touch to pick", rot);
+
+  if (nets.empty()) {
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(th().muted, th().bg);
+    tft.drawString("No networks found", w / 2, 110, 2);
+    tft.drawString("Tap Rescan", w / 2, 136, 2);
+  } else {
+    int y = 48;
+    for (int i = 0; i < visible; i++) {
+      int idx = scroll + i;
+      if (idx >= (int)nets.size()) break;
+      const WifiNetwork& n = nets[idx];
+      bool sel = idx == selected;
+      uint16_t bg = sel ? th().grid : th().card;
+      uint16_t fg = sel ? th().text : th().muted;
+      tft.fillRoundRect(8, y, w - 16, itemH - 4, 6, bg);
+      tft.setTextDatum(TL_DATUM);
+      tft.setTextColor(fg, bg);
+      String label = n.ssid;
+      if (label.length() > 22) label = label.substring(0, 21) + ".";
+      tft.drawString(label, 16, y + 6, 2);
+      tft.setTextDatum(TR_DATUM);
+      String meta = n.secure ? "lock " : "open ";
+      meta += String(n.rssi) + " dBm";
+      tft.drawString(meta, w - 16, y + 8, 1);
+      y += itemH;
+    }
+    if ((int)nets.size() > visible) {
+      tft.setTextDatum(MC_DATUM);
+      tft.setTextColor(th().dim, th().bg);
+      tft.drawString(String(scroll + 1) + "-" + String(min(scroll + visible, (int)nets.size())) + " / " +
+                         String(nets.size()),
+                     w / 2, ny - 78, 1);
+    }
+  }
+
+  int btnY = ny - 66;
+  drawWideKey(tft, 8, btnY, (w - 20) / 2, 28, "Rescan", th().card, th().grid);
+  drawWideKey(tft, 12 + (w - 20) / 2, btnY, (w - 20) / 2, 28, "Phone", th().card, th().pv);
+  drawWideKey(tft, 8, btnY + 34, w - 16, 28, "Back", th().panel, th().text);
+
+  tft.setTextDatum(TC_DATUM);
+  tft.setTextColor(th().muted, th().bg);
+  String st = status;
+  if (st.length() > 34) st = st.substring(0, 33) + ".";
+  tft.drawString(st, w / 2, btnY - 10, 1);
+}
+
+void Ui::drawWifiPassword(TFT_eSPI& tft, const String& ssid, const String& password, bool showPass, bool shift,
+                          const String& status) {
+  uint8_t rot = rotation_;
+  int w = scrW(rot);
+  int ny = navY(rot);
+  tft.fillScreen(th().bg);
+  fillHeader(tft, "Password", shift ? "ABC" : "abc", rot);
+
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(th().dim, th().bg);
+  tft.drawString("Network", 12, 28, 1);
+  tft.setTextColor(th().text, th().bg);
+  String s = ssid;
+  if (s.length() > 28) s = s.substring(0, 27) + ".";
+  tft.drawString(s, 12, 42, 2);
+
+  tft.fillRoundRect(8, 62, w - 16, 28, 6, th().card);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(th().text, th().card);
+  String shown = password;
+  if (!showPass && shown.length()) {
+    shown = "";
+    for (size_t i = 0; i < password.length(); i++) shown += "*";
+  }
+  if (shown.length() > 26) shown = shown.substring(0, 25) + ".";
+  if (shown.length() == 0) shown = "tap keys below";
+  tft.drawString(shown, 16, 70, 2);
+
+  const int rowY0 = 98;
+  const int rowStep = 28;
+  drawKeyRow(tft, rowY0, w, "1234567890", 10, false, th().panel, th().text);
+  drawKeyRow(tft, rowY0 + rowStep, w, "qwertyuiop", 10, shift, th().panel, th().text);
+  drawKeyRow(tft, rowY0 + rowStep * 2, w, "asdfghjkl", 9, shift, th().panel, th().text);
+
+  const int gap = 2;
+  const int margin = 4;
+  int y3 = rowY0 + rowStep * 3;
+  int zCount = 8;
+  int totalZ = w - margin * 2 - gap * (zCount);
+  int kw = totalZ / zCount;
+  const char* zrow = "zxcvbnm";
+  for (int i = 0; i < 7; i++) {
+    int x = margin + i * (kw + gap);
+    char lbl[2] = {zrow[i], 0};
+    if (shift && lbl[0] >= 'a' && lbl[0] <= 'z') lbl[0] = (char)(lbl[0] - 32);
+    drawWideKey(tft, x, y3, kw, 24, lbl, th().panel, th().text);
+  }
+  drawWideKey(tft, margin + 7 * (kw + gap), y3, kw, 24, "Del", th().warn, th().onAccent);
+
+  int y4 = rowY0 + rowStep * 4;
+  drawWideKey(tft, margin, y4, kw, 24, shift ? "abc" : "ABC", th().card, th().grid);
+  drawWideKey(tft, margin + (kw + gap), y4, kw, 24, ".", th().panel, th().text);
+  drawWideKey(tft, margin + 2 * (kw + gap), y4, kw, 24, "-", th().panel, th().text);
+  drawWideKey(tft, margin + 3 * (kw + gap), y4, kw, 24, "_", th().panel, th().text);
+  drawWideKey(tft, margin + 4 * (kw + gap), y4, kw, 24, "@", th().panel, th().text);
+  int spaceW = w - margin * 2 - 5 * (kw + gap) - kw - gap;
+  drawWideKey(tft, margin + 5 * (kw + gap), y4, spaceW, 24, "space", th().panel, th().text);
+  drawWideKey(tft, margin + 5 * (kw + gap) + spaceW + gap, y4, kw, 24, showPass ? "Hide" : "Show", th().card,
+              th().muted);
+
+  int y5 = ny - 34;
+  drawWideKey(tft, 8, y5, (w - 20) / 2, 28, "Back", th().panel, th().text);
+  drawWideKey(tft, 12 + (w - 20) / 2, y5, (w - 20) / 2, 28, "Connect", th().charge, th().onAccent);
+
+  tft.setTextDatum(TC_DATUM);
+  tft.setTextColor(th().muted, th().bg);
+  String st = status;
+  if (st.length() > 34) st = st.substring(0, 33) + ".";
+  tft.drawString(st, w / 2, y5 - 10, 1);
+}
+
+static bool hitKeyRow(int16_t x, int16_t y, int rowY, int w, const char* keys, int count, bool shift, char& outChar) {
+  const int gap = 2;
+  const int margin = 4;
+  if (y < rowY || y > rowY + 24) return false;
+  int total = w - margin * 2 - gap * (count - 1);
+  int kw = total / count;
+  for (int i = 0; i < count; i++) {
+    int kx = margin + i * (kw + gap);
+    if (x >= kx && x <= kx + kw) {
+      char c = keys[i];
+      if (c >= 'a' && c <= 'z' && shift) c = (char)(c - 32);
+      outChar = c;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Ui::wifiNetworkAt(int16_t x, int16_t y, int scroll, int count, int& index, bool& rescan, bool& phone,
+                       bool& back, uint8_t rotation) {
+  rescan = phone = back = false;
+  int w = scrW(rotation);
+  int ny = navY(rotation);
+  const int itemH = 32;
+  const int visible = 5;
+  int btnY = ny - 66;
+
+  if (y >= btnY && y <= btnY + 28) {
+    if (x >= 8 && x <= 8 + (w - 20) / 2) {
+      rescan = true;
+      return true;
+    }
+    if (x >= 12 + (w - 20) / 2 && x <= w - 8) {
+      phone = true;
+      return true;
+    }
+  }
+  if (y >= btnY + 34 && y <= btnY + 62 && x >= 8 && x <= w - 8) {
+    back = true;
+    return true;
+  }
+  if (x < 8 || x > w - 8 || y < 48) return false;
+  int rel = (y - 48) / itemH;
+  if (rel < 0 || rel >= visible) return false;
+  index = scroll + rel;
+  if (index < 0 || index >= count) return false;
+  return true;
+}
+
+bool Ui::wifiPasswordAt(int16_t x, int16_t y, bool shift, char& outChar, bool& backspace, bool& shiftKey, bool& space,
+                          bool& showPass, bool& connect, bool& back, uint8_t rotation) {
+  outChar = 0;
+  backspace = shiftKey = space = showPass = connect = back = false;
+  int w = scrW(rotation);
+  int ny = navY(rotation);
+  const int rowY0 = 98;
+  const int rowStep = 28;
+  const int gap = 2;
+  const int margin = 4;
+  int zCount = 8;
+  int totalZ = w - margin * 2 - gap * (zCount - 1);
+  int kw = totalZ / zCount;
+
+  if (hitKeyRow(x, y, rowY0, w, "1234567890", 10, false, outChar)) return true;
+  if (hitKeyRow(x, y, rowY0 + rowStep, w, "qwertyuiop", 10, shift, outChar)) return true;
+  if (hitKeyRow(x, y, rowY0 + rowStep * 2, w, "asdfghjkl", 9, shift, outChar)) return true;
+
+  int y3 = rowY0 + rowStep * 3;
+  if (y >= y3 && y <= y3 + 24) {
+    for (int i = 0; i < 7; i++) {
+      int kx = margin + i * (kw + gap);
+      if (x >= kx && x <= kx + kw) {
+        outChar = "zxcvbnm"[i];
+        if (shift && outChar >= 'a' && outChar <= 'z') outChar = (char)(outChar - 32);
+        return true;
+      }
+    }
+    int delX = margin + 7 * (kw + gap);
+    if (x >= delX && x <= delX + kw) {
+      backspace = true;
+      return true;
+    }
+  }
+
+  int y4 = rowY0 + rowStep * 4;
+  if (y >= y4 && y <= y4 + 24) {
+    if (x >= margin && x <= margin + kw) {
+      shiftKey = true;
+      return true;
+    }
+    const char* syms = ".-_@";
+    for (int i = 0; i < 4; i++) {
+      int kx = margin + (i + 1) * (kw + gap);
+      if (x >= kx && x <= kx + kw) {
+        outChar = syms[i];
+        return true;
+      }
+    }
+    int spaceW = w - margin * 2 - 5 * (kw + gap) - kw - gap;
+    int spaceX = margin + 5 * (kw + gap);
+    if (x >= spaceX && x <= spaceX + spaceW) {
+      space = true;
+      return true;
+    }
+    int showX = spaceX + spaceW + gap;
+    if (x >= showX && x <= showX + kw) {
+      showPass = true;
+      return true;
+    }
+  }
+
+  int y5 = ny - 34;
+  if (y >= y5 && y <= y5 + 28) {
+    if (x >= 8 && x <= 8 + (w - 20) / 2) {
+      back = true;
+      return true;
+    }
+    if (x >= 12 + (w - 20) / 2 && x <= w - 8) {
+      connect = true;
+      return true;
+    }
+  }
+  return false;
+}
+
+void Ui::drawPinPad(TFT_eSPI& tft, const char* title, const String& entry, const String& subtitle,
+                    const String& status) {
+  uint8_t rot = rotation_;
+  int w = scrW(rot);
+  int ny = navY(rot);
+  tft.fillScreen(th().bg);
+  fillHeader(tft, title, subtitle, rot);
+
+  String dots;
+  for (int i = 0; i < 4; i++) {
+    dots += (i < (int)entry.length()) ? " * " : " o ";
+  }
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(th().text, th().bg);
+  tft.drawString(dots, w / 2, 58, 4);
+
+  const int cols = 3;
+  const int gap = 6;
+  const int margin = 16;
+  const int kw = (w - margin * 2 - gap * (cols - 1)) / cols;
+  const int kh = 36;
+  const char* keys = "123456789";
+  int y0 = 88;
+  for (int i = 0; i < 9; i++) {
+    int row = i / 3;
+    int col = i % 3;
+    int x = margin + col * (kw + gap);
+    int y = y0 + row * (kh + gap);
+    char lbl[2] = {keys[i], 0};
+    drawWideKey(tft, x, y, kw, kh, lbl, th().panel, th().text);
+  }
+  int y3 = y0 + 3 * (kh + gap);
+  drawWideKey(tft, margin, y3, kw, kh, "Back", th().card, th().muted);
+  drawWideKey(tft, margin + (kw + gap), y3, kw, kh, "0", th().panel, th().text);
+  drawWideKey(tft, margin + 2 * (kw + gap), y3, kw, kh, "Del", th().warn, th().onAccent);
+
+  drawWideKey(tft, margin, y3 + kh + gap, w - margin * 2, kh, "OK", th().charge, th().onAccent);
+
+  tft.setTextDatum(TC_DATUM);
+  tft.setTextColor(th().muted, th().bg);
+  String st = status;
+  if (st.length() > 34) st = st.substring(0, 33) + ".";
+  tft.drawString(st, w / 2, ny - 12, 1);
+}
+
+bool Ui::pinPadAt(int16_t x, int16_t y, int& digit, bool& del, bool& ok, bool& back, uint8_t rotation) {
+  digit = -1;
+  del = ok = back = false;
+  int w = scrW(rotation);
+  const int cols = 3;
+  const int gap = 6;
+  const int margin = 16;
+  const int kw = (w - margin * 2 - gap * (cols - 1)) / cols;
+  const int kh = 36;
+  const char* keys = "123456789";
+  int y0 = 88;
+  for (int i = 0; i < 9; i++) {
+    int row = i / 3;
+    int col = i % 3;
+    int kx = margin + col * (kw + gap);
+    int ky = y0 + row * (kh + gap);
+    if (x >= kx && x <= kx + kw && y >= ky && y <= ky + kh) {
+      digit = keys[i] - '0';
+      return true;
+    }
+  }
+  int y3 = y0 + 3 * (kh + gap);
+  if (y >= y3 && y <= y3 + kh) {
+    if (x >= margin && x <= margin + kw) {
+      back = true;
+      return true;
+    }
+    if (x >= margin + (kw + gap) && x <= margin + 2 * (kw + gap)) {
+      digit = 0;
+      return true;
+    }
+    if (x >= margin + 2 * (kw + gap) && x <= margin + 3 * (kw + gap)) {
+      del = true;
+      return true;
+    }
+  }
+  int okY = y3 + kh + gap;
+  if (y >= okY && y <= okY + kh && x >= margin && x <= w - margin) {
+    ok = true;
+    return true;
+  }
+  return false;
 }

@@ -75,6 +75,8 @@ struct DisplayConfig {
   bool grid_offline_alert = true;
   bool force_update = false;
   String force_update_version;
+  String settings_pin;
+  bool settings_pin_set = false;
 };
 
 class ApiClient {

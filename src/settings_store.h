@@ -16,6 +16,7 @@ struct HostSettings {
   bool checkForUpdate = false;
   bool autoInstallUpdate = false;
   uint32_t configRev = 0;
+  String settingsPin;  // "" = off, else 4 digits
 };
 
 class SettingsStore {

@@ -1,22 +1,9 @@
-<p align="center">
-  <strong>Solar Monitoring Viewer</strong>
-</p>
-
-<h1 align="center">Solar Monitoring Viewer (ESP32)</h1>
-
-<p align="center">
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://platformio.org/"><img src="https://img.shields.io/badge/PlatformIO-ESP32-blue.svg" alt="PlatformIO"></a>
-</p>
-
-<p align="center">
-Official companion display for <a href="https://github.com/jcvsite/solar-monitoring">solar-monitoring</a> — local 2.8″ wall/desk glance UI with no cloud dependency.
-</p>
-
 # Solar Monitoring Viewer (ESP32)
 
-Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/solar-monitoring)**.  
-Runs on common **2.8″ ESP32 + ILI9341** boards (Cheap Yellow Display / ESP32-2432S028 class).
+> **Firmware home:** [github.com/jcvsite/Solar-monitoring-viewer-esp32](https://github.com/jcvsite/Solar-monitoring-viewer-esp32)  
+> This copy in `solar-monitoring/esp32_display/` tracks development; releases and OTA are published from the viewer repo.
+
+Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/solar-monitoring)**.
 
 <p align="center">
   <img src="docs/esp32-glance-ui.png" alt="Early design concept — see layout below for the actual firmware UI" width="320"/>
@@ -46,21 +33,37 @@ Runs on common **2.8″ ESP32 + ILI9341** boards (Cheap Yellow Display / ESP32-2
 |---|---|
 | **What it does** | Shows live SOC, PV / load / grid, BMS detail, and a simple history sparkline |
 | **How it talks** | HTTP to your solar-monitoring PC (`/api/display`) — no cloud |
-| **How you set WiFi** | SoftAP portal on first boot (phone browser) — no hardcoded password required |
+| **How you set WiFi** | On-screen touch picker + keyboard, or phone browser fallback (SoftAP) |
+| **Hardware** | ESP32-2432S028R **Cheap Yellow Display** (CYD), 2.8″ 240×320 touch |
 | **Many boards?** | Yes — each device has a unique setup AP name |
-| **Layouts / themes** | 5 glance layouts × portrait/landscape; 5 themes — pick on device or host web |
-| **OTA updates** | Via solar-monitoring host proxy from GitHub Releases |
 
-Repository: **https://github.com/jcvsite/Solar-monitoring-viewer-esp32**
+This folder is self-contained and can later become its **own GitHub repository**.
 
 ---
 
 ## What you need
 
-1. A **2.8″ ESP32 display** (ILI9341, 240×320, USB-C) — CYD-style boards work with the default pin map  
+### Supported hardware
+
+This firmware targets the **ESP32 Cheap Yellow Display (CYD)** — commonly sold as **ESP32-2432S028** / **ESP32-2432S028R** (board label **HW-458**).
+
+| | |
+|---|---|
+| **Display** | 2.8″ ILI9341 color TFT, **240×320** pixels |
+| **Touch** | XPT2046 resistive (separate SPI bus from the LCD) |
+| **MCU** | ESP32 (dual-core, typically **4 MB** flash) |
+| **USB** | Micro-USB (CH340 or CP2102 serial) |
+| **Size** | ~87 × 49 mm PCB |
+| **Pin map** | Default `platformio.ini` matches [witnessmenow CYD](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display) |
+
+Other ILI9341 240×320 ESP32 boards may work if you adjust TFT/touch pins in `platformio.ini` and `include/config.h`.
+
+### Software / network
+
+1. A **CYD ESP32 display** (see above)  
 2. A PC or Pi running **solar-monitoring** with the web dashboard on (default port **8081**)  
 3. Same WiFi / LAN for both  
-4. USB cable for flashing  
+4. USB **data** cable for flashing  
 
 On the host (`config.ini`):
 
@@ -126,18 +129,48 @@ Default pins match common CYD 2.8″ boards (`platformio.ini`). Change `build_fl
 
 No need to edit `secrets.h` for normal use.
 
+### Option A — On the display (recommended)
+
+Use the built-in touch UI — no phone required.
+
+1. Power the display (USB). If WiFi is not configured, the **WiFi network list** opens automatically.  
+2. Wait for **Scanning…** to finish (a few seconds).  
+3. **Tap your home network** in the list (signal strength and lock icon shown).  
+4. Type the password with the on-screen keyboard:  
+   - **ABC / abc** toggles upper/lower case  
+   - **Show / Hide** reveals the password  
+   - **Del** removes the last character  
+   - **space** and symbols `. - _ @` are available  
+5. Tap **Connect**. On success the display joins your LAN and continues to host discovery.  
+
+To change WiFi later: **Settings → WiFi Setup**.
+
+### Option B — Phone browser (fallback)
+
+Useful if touch calibration is off or you prefer a full phone keyboard.
+
 <p align="center">
   <img src="docs/esp32-wifi-setup.png" alt="WiFi SoftAP setup steps with phone" width="640"/>
 </p>
 
-1. Power the display (USB). The screen shows **WiFi Setup**.  
+1. From **Settings → WiFi Setup**, tap **Phone** (or wait on the phone portal screen during SoftAP mode).  
 2. On your phone, join the open AP named like **`SolarDisplay-Setup-A1B2`**  
    (suffix is unique per board — set up **one device at a time**).  
-3. Open the captive portal, or browse to **http://192.168.4.1**.  
-4. Select your home WiFi, enter the password, save.  
+3. The captive portal should open automatically; if not, browse to **http://192.168.4.1**.  
+4. Pick your home WiFi from the dropdown, enter the password (large touch-friendly fields), and **Save**.  
 5. The display joins your LAN, then searches for solar-monitoring (**mDNS**, then subnet scan).  
 
-Credentials are stored in flash. To change WiFi later: **Settings → WIFI SETUP**.
+Credentials are stored in flash.
+
+### Settings PIN (optional)
+
+Set a **4-digit PIN** in **Settings → Settings PIN** on the device, in the web dashboard (**Settings → ESP32 display → Settings PIN**), or on the device web UI (`http://<display-ip>/`). When a PIN is set:
+
+- The **Set** tab on the display asks for the PIN before opening settings.
+- The **device web UI** shows a PIN gate before the settings form.
+- The **host web dashboard** ESP32 section requires **Enter PIN to unlock** before editing or saving.
+
+The same PIN is synced from the host when **Sync from host** is enabled. Tap **OK** with no digits on the device PIN setup screen to turn the PIN off.
 
 Optional: put SSID/password in `include/secrets.h` (from `secrets.h.example`) as a factory fallback.
 
@@ -152,7 +185,7 @@ Touch the bottom tabs:
 | **Glance** | Title, **weather icon + temperature** (when weather is enabled on the host), **clock in the host's `LOCAL_TIMEZONE`**, large **SOC**, PV / Load / Grid, today kWh. **Pulsing red/orange bar** on no-grid / brownout |
 | **BMS** | Pack voltage/current/power, temps, cell delta, cell bar strip |
 | **Hist** | PV & load sparkline + today’s energy totals |
-| **Set** | Host IP, **FIND** (discover), **SAVE**, **WIFI SETUP** |
+| **Set** | Host IP, **FIND** (discover), **Manual**, **WiFi Setup** (touch picker + keyboard) |
 
 ```text
 ESP32 display  --HTTP GET /api/display-->  solar-monitoring :8081
@@ -173,7 +206,8 @@ All can poll the same solar-monitoring host — the APIs are stateless.
 | Symptom | What to try |
 |---------|-------------|
 | Upload fails | Hold **BOOT**, retry; check COM port; try a data-capable USB cable |
-| Stuck on WiFi Setup | Join the exact AP name on the screen; try `192.168.4.1` manually |
+| Stuck on WiFi Setup | Tap **Rescan**; check 2.4 GHz network; try **Phone** fallback; join exact AP name `SolarDisplay-Setup-XXXX` |
+| Wrong WiFi password | Tap network again → re-enter password; use **Show** to verify characters |
 | WiFi OK but no data | Confirm host web dashboard is running; Settings → **FIND**; same LAN/VLAN |
 | Wrong colors / white screen | Pin map mismatch — check seller wiki vs `platformio.ini` |
 | Touch not working | CYD uses a **separate SPI bus** for touch (GPIO 25/32/39/33/36). See [CYD TouchTest](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display/tree/main/Examples/Basics/2-TouchTest). Tune `TOUCH_MAP_*`, `TOUCH_SWAP_XY`, `TOUCH_MIRROR_X/Y` in `include/config.h` |
@@ -183,6 +217,8 @@ All can poll the same solar-monitoring host — the APIs are stateless.
 
 ## For developers
 
+- **Logo bitmap:** splash and WiFi setup use `include/logo_solar_monitoring.h`, generated from the monorepo icon:
+  `python esp32_display/scripts/png_to_logo_header.py` (reads `static/icons/icon-192x192.png`).
 - APIs: `GET /api/display`, `/api/display/bms`, `/api/display/history?hours=24`  
   Glance payload includes `clock`, `timezone`, `tz_offset_sec`, and `weather` (Open-Meteo, cached on the host).  
   The display uses the host timezone for NTP and shows the server `clock` string in the header.

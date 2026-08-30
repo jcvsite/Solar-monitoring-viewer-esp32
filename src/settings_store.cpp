@@ -25,6 +25,8 @@ HostSettings SettingsStore::load() {
   s.checkForUpdate = prefs_.getBool("chkUpd", false);
   s.autoInstallUpdate = prefs_.getBool("autoUpd", false);
   s.configRev = prefs_.getUInt("cfgRev", 0);
+  s.settingsPin = prefs_.getString("setPin", "");
+  if (s.settingsPin.length() != 4) s.settingsPin = "";
   if (s.hostPort == 0) s.hostPort = DEFAULT_HOST_PORT;
   if (s.pollMs < 2000) s.pollMs = 2000;
   if (s.autoInstallUpdate) s.checkForUpdate = true;
@@ -45,4 +47,5 @@ void SettingsStore::save(const HostSettings& s) {
   prefs_.putBool("chkUpd", s.checkForUpdate);
   prefs_.putBool("autoUpd", s.autoInstallUpdate);
   prefs_.putUInt("cfgRev", s.configRev);
+  prefs_.putString("setPin", s.settingsPin.length() == 4 ? s.settingsPin : "");
 }

@@ -1,8 +1,21 @@
 # Changelog
 
-All notable changes to Solar Monitoring Viewer (ESP32) will be documented in this file.
+All notable changes to [Solar Monitoring Viewer (ESP32)](https://github.com/jcvsite/Solar-monitoring-viewer-esp32) are documented here.
 
 ## [Unreleased]
+
+## [0.2.1] - 2026-08-30
+
+### Added
+- **Solar Monitoring logo** on boot splash and WiFi setup (from `static/icons/icon-192x192.png` via `scripts/png_to_logo_header.py`).
+- **On-device WiFi setup**: touch network list, on-screen password keyboard, and **Phone** fallback to the SoftAP portal.
+- **Optional 4-digit settings PIN** — locks the Settings tab and device web UI; syncs from host `display_config.json` when **Sync from host** is enabled.
+- **Cheap Yellow Display (CYD)** hardware documentation: ESP32-2432S028R, 2.8″ ILI9341 240×320, XPT2046 touch.
+
+### Changed
+- Improved mobile styling for the WiFiManager captive portal (SoftAP fallback).
+- Settings layout adjusted for PIN row; Find / Manual / WiFi buttons repositioned.
+- Firmware version `0.2.1`.
 
 ## [0.2.0] - 2026-08-30
 
