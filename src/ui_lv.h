@@ -27,6 +27,7 @@ class UiLv {
 
   void updateGlance(const GlanceData& g, bool stale, bool gridAlert, uint8_t layoutId);
   void pulseGlanceGrid(bool gridAlert, uint32_t animMs);
+  void animateGlanceBattery(const GlanceData& g, uint32_t animMs);
   void refreshHeaderTime(const GlanceData& g);
   void updateBms(const BmsData& b);
   void updateHistory(const HistoryData& h);

@@ -1,8 +1,8 @@
 #include "ui_wifi.h"
 #include "ui_actions.h"
+#include "ui_logo.h"
 #include "ui_theme.h"
 #include "ui_util.h"
-#include "logo_solar_monitoring_lvgl.h"
 #include <stdio.h>
 
 static void wifiAction(lv_event_t* e) {
@@ -23,22 +23,29 @@ void uiWifiDestroy(UiWifiWidgets& w) {
 
 void uiWifiBuildPortal(UiWifiWidgets& w, const char* apName) {
   uiWifiDestroy(w);
+  uiLogoEnsureLoaded();
   const ThemePalette& t = themeActive();
   w.screen = lv_obj_create(NULL);
   lv_obj_remove_style_all(w.screen);
   lv_obj_add_style(w.screen, &uiStyleScreen, 0);
   lv_obj_set_size(w.screen, LV_HOR_RES, LV_VER_RES);
 
-  lv_obj_t* img = lv_img_create(w.screen);
-  lv_img_set_src(img, &logo_solar_monitoring_img);
-  lv_obj_align(img, LV_ALIGN_TOP_MID, 0, 8);
+  const lv_img_dsc_t* logo = uiLogoDescriptor();
+  lv_obj_t* img = nullptr;
+  if (logo) {
+    img = lv_img_create(w.screen);
+    lv_img_set_src(img, logo);
+    lv_img_set_zoom(img, uiLogoSplashZoom());
+    lv_obj_align(img, LV_ALIGN_TOP_MID, 0, 8);
+  }
 
-  uiMakeLabel(w.screen, "Phone WiFi Setup", uiFontTitle(), uiColor565(t.text));
-  lv_obj_align(lv_obj_get_child(w.screen, 1), LV_ALIGN_TOP_MID, 0, 100);
-  uiMakeLabel(w.screen, apName, uiFontBody(), uiColor565(t.pv));
-  lv_obj_align(lv_obj_get_child(w.screen, 2), LV_ALIGN_TOP_MID, 0, 130);
-  uiMakeLabel(w.screen, "Join AP, open 192.168.4.1", uiFontBody(), uiColor565(t.muted));
-  lv_obj_align(lv_obj_get_child(w.screen, 3), LV_ALIGN_TOP_MID, 0, 160);
+  lv_obj_t* title = uiMakeLabel(w.screen, "Phone WiFi Setup", uiFontTitle(), uiColor565(t.text));
+  if (img) lv_obj_align_to(title, img, LV_ALIGN_OUT_BOTTOM_MID, 0, 8);
+  else lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 24);
+  lv_obj_t* apLbl = uiMakeLabel(w.screen, apName, uiFontBody(), uiColor565(t.pv));
+  lv_obj_align_to(apLbl, title, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+  lv_obj_t* hint = uiMakeLabel(w.screen, "Join AP, open 192.168.4.1", uiFontBody(), uiColor565(t.muted));
+  lv_obj_align_to(hint, apLbl, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
   lv_scr_load(w.screen);
 }
 

@@ -9,6 +9,7 @@ void uiThemeRefreshStyles();
 const lv_font_t* uiFontBody();
 const lv_font_t* uiFontTitle();
 const lv_font_t* uiFontDisplay();
+const lv_font_t* uiFontSoc();
 
 extern lv_style_t uiStyleScreen;
 extern lv_style_t uiStyleCard;

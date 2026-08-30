@@ -7,10 +7,12 @@
 static TFT_eSPI* s_tft = nullptr;
 static uint8_t s_rotation = 0;
 
-static constexpr int kBufLines = 40;
+// Buffer line width must be >= max hor_res (320 in landscape).
+static constexpr int kBufMaxWidth = 320;
+static constexpr int kBufLines = 30;
 
 static lv_disp_draw_buf_t s_drawBuf;
-static lv_color_t s_buf1[240 * kBufLines];
+static lv_color_t s_buf1[kBufMaxWidth * kBufLines];
 static lv_disp_drv_t s_dispDrv;
 static lv_indev_drv_t s_indevDrv;
 
@@ -23,7 +25,8 @@ static void flushCb(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* color
   const int32_t h = area->y2 - area->y1 + 1;
   s_tft->startWrite();
   s_tft->setAddrWindow(area->x1, area->y1, w, h);
-  s_tft->pushPixels(reinterpret_cast<uint16_t*>(color_p), (uint32_t)(w * h));
+  // LV_COLOR_16_SWAP=1 already emits swapped bytes for the panel.
+  s_tft->pushColors(reinterpret_cast<uint16_t*>(color_p), (uint32_t)(w * h), false);
   s_tft->endWrite();
   lv_disp_flush_ready(drv);
 }
@@ -49,9 +52,10 @@ static void updateDispMetrics() {
 void lvglPortInit(TFT_eSPI& tft, uint8_t rotation) {
   s_tft = &tft;
   s_rotation = rotation & 3;
+  touchInputSetRotation(s_rotation);
 
   lv_init();
-  lv_disp_draw_buf_init(&s_drawBuf, s_buf1, nullptr, 240 * kBufLines);
+  lv_disp_draw_buf_init(&s_drawBuf, s_buf1, nullptr, kBufMaxWidth * kBufLines);
 
   lv_disp_drv_init(&s_dispDrv);
   updateDispMetrics();
@@ -69,7 +73,7 @@ void lvglPortSetRotation(uint8_t rotation) {
   s_rotation = rotation & 3;
   touchInputSetRotation(s_rotation);
   updateDispMetrics();
-  lv_obj_invalidate(lv_scr_act());
+  if (lv_scr_act()) lv_obj_invalidate(lv_scr_act());
 }
 
 void lvglPortTick() {

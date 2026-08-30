@@ -11,21 +11,19 @@ Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/sola
 
 > The photo above is an **early design mockup**. Firmware **v0.3.0+** uses **LVGL** for card-based UI aligned with the web dashboard mockups (themes, layouts, animated SOC/grid alert).
 
-**Actual Glance screen (portrait 240×320, LVGL):**
+**Actual Glance screen — Classic layout (portrait 240×320, LVGL v0.3.1):**
 
 ```text
 ┌──────────────────────────────┐
 │ My Home Solar    ☀ 32°C  3:36 PM │  title + weather + server clock
-│ ● GRID OK  (or alert bar)    │  grid status chip
-│   [icon]        78%          │  battery + large SOC
-│ ████████░░░░  SOC bar        │
+│ ● GRID OK  (or NO GRID blink)│  grid status chip
+│      [battery]    78%        │  centered battery + large white SOC
 │        Charging 450 W        │
-│ PV   PV              3.4 kW  │
-│ LD   LOAD            0.8 kW  │
-│ GR   GRID         OK 120 W   │
+│ ☀ PV                  3.4 kW │  right-aligned values + caption icons
+│ ⌂ LOAD                0.8 kW │
+│ ⇄ GRID               120 W   │
 │ Today PV 12.6   Load 6.8     │
-│ Inverter: Normal             │
-│ Glance   BMS   Hist   Set    │  touch tabs
+│  🏠   🔋   📊   ⚙           │  icon-only bottom nav (accent + dot)
 └──────────────────────────────┘
 ```
 
@@ -182,10 +180,10 @@ Touch the bottom tabs:
 
 | Tab | What you see |
 |-----|----------------|
-| **Glance** | Title, **weather icon + temperature** (when weather is enabled on the host), **clock in the host's `LOCAL_TIMEZONE`**, large **SOC**, PV / Load / Grid, today kWh. **Pulsing red/orange bar** on no-grid / brownout |
-| **BMS** | Pack voltage/current/power, temps, cell delta, cell bar strip |
-| **Hist** | PV & load sparkline + today’s energy totals |
-| **Set** | Host IP, **FIND** (discover), **Manual**, **WiFi Setup** (touch picker + keyboard) |
+| **Glance** | Title, **weather + temperature**, **clock in host `LOCAL_TIMEZONE`**, centered battery icon + large **SOC**, animated fill when charging/discharging, PV / Load / Grid with icons, today kWh. **Red “NO GRID” blink** every 5 s when grid is offline |
+| **BMS** | Pack stats, temps, cell delta; color-coded cell voltage bars with min/max markers and centered voltage labels |
+| **Hist** | PV & load sparkline (compact chart) + today’s energy totals with color icons |
+| **Set** | Scrollable panels — host IP, **FIND** (discover), **Manual**, **WiFi Setup**, firmware OTA, settings PIN. Color icons on rows and tabs |
 
 ```text
 ESP32 display  --HTTP GET /api/display-->  solar-monitoring :8081

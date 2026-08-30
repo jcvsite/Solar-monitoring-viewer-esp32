@@ -392,7 +392,8 @@ static void startWifiScan() {
 static bool connectPickedWifi(const String& ssid, const String& pass) {
   wifiStatus = "Connecting...";
   needRedraw = true;
-  ui.showSplash(wifiStatus.c_str());
+  ui.setSplashMsg(wifiStatus.c_str());
+  ui.tick();
   if (!wifiConnectAndSave(ssid.c_str(), pass.c_str())) {
     wifiStatus = "Failed — check password";
     return false;
@@ -569,14 +570,18 @@ static bool ensureWifi(bool forcePortal) {
     return ok && WiFi.status() == WL_CONNECTED;
   }
 
-  ui.showSplash("WiFi...");
+  ui.setSplashMsg("WiFi...");
+  ui.tick();
   bool ok = false;
   if (seedOk) {
     ok = wm.autoConnect(gPortalApName.c_str(), NULL);
     if (!ok) {
       WiFi.begin(seedSsid.c_str(), seedPass.c_str());
       uint32_t t0 = millis();
-      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 12000) delay(200);
+      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 12000) {
+        lvglPortTick();
+        delay(20);
+      }
       ok = WiFi.status() == WL_CONNECTED;
       if (!ok) {
         ui.showWifiPortal(gPortalApName.c_str());
@@ -791,13 +796,15 @@ void setup() {
   ui.setTheme(settings.themeId);
   uiActionsSetHandler(handleUiAction);
   ui.showSplash("Starting...");
+  ui.tick();
 
   gitOta.begin();
   gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
                    settings.autoInstallUpdate);
 
   if (ensureWifi(false)) {
-    ui.showSplash(WiFi.localIP().toString().c_str());
+    ui.setSplashMsg(WiFi.localIP().toString().c_str());
+    ui.tick();
     deviceWeb.applySettings(settings);
     deviceWeb.begin();
     ui.ensureClock();
@@ -824,7 +831,8 @@ void setup() {
 
   pollDisplayConfig(true);
   pollIfDue(true);
-  needRedraw = true;
+  refreshCurrentPage();
+  needRedraw = false;
 }
 
 void loop() {
@@ -867,9 +875,15 @@ void loop() {
     ui.refreshHeaderTime(glance);
   }
 
-  if (page == UiPage::Glance && glanceGridAlert(glance) && millis() - lastAnim >= 500) {
+  if (page == UiPage::Glance && glanceGridAlert(glance) && millis() - lastAnim >= 5000) {
     lastAnim = millis();
-    ui.pulseGlanceGrid(settings.gridOfflineAlert, millis());
+    ui.pulseGlanceGrid(true, millis());
+  }
+
+  static uint32_t lastBattAnim = 0;
+  if (page == UiPage::Glance && millis() - lastBattAnim >= 120) {
+    lastBattAnim = millis();
+    ui.animateGlanceBattery(glance, millis());
   }
 
   if (needRedraw) {

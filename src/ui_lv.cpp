@@ -2,14 +2,14 @@
 #include "ui_lv/ui_splash.h"
 #include "ui_lv/ui_setup.h"
 #include "ui_lv/ui_theme.h"
+#include "ui_lv/ui_logo.h"
 #include "lvgl_port.h"
 #include "layout.h"
 
 void UiLv::begin(TFT_eSPI& tft, uint8_t rotation) {
   rotation_ = rotation & 3;
-  uiThemeInitOnce();
-  uiThemeApply(0);
   lvglPortInit(tft, rotation_);
+  uiThemeInitOnce();
 }
 
 void UiLv::setRotation(uint8_t rotation) {
@@ -50,8 +50,14 @@ void UiLv::rebuildIfNeeded(UiPage page) {
   if (!shellActive_ || !shell_.root) {
     uiWifiDestroy(wifi_);
     uiPinDestroy(pin_);
-    uiShellCreate(shell_, page, mainNav);
+    uiShellCreate(shell_, page, mainNav, rotation_);
+    uiSplashDismiss();
+    uiLogoRelease();
     shellActive_ = true;
+    if (page == UiPage::Glance) uiGlanceBuild(shell_, glance_, glanceLayout_);
+    else if (page == UiPage::Bms) uiBmsBuild(shell_, bms_);
+    else if (page == UiPage::History) uiHistoryBuild(shell_, history_);
+    else if (page == UiPage::Settings) { /* built in updateSettings */ }
   } else {
     uiShellSetPage(shell_, page);
     if (page == UiPage::Glance) uiGlanceBuild(shell_, glance_, glanceLayout_);
@@ -71,14 +77,19 @@ void UiLv::showPage(UiPage page) {
 }
 
 void UiLv::refreshHeaderTime(const GlanceData& g) {
-  if (shell_.root) uiShellSetHeader(shell_, g.title, uiClockHeaderRight(g));
+  if (shell_.root) {
+    uiShellSetPage(shell_, UiPage::Glance);
+    uiShellSetGlanceHeader(shell_, g);
+  }
 }
 
 void UiLv::updateGlance(const GlanceData& g, bool stale, bool gridAlert, uint8_t layoutId) {
   glanceLayout_ = layoutId;
-  if (currentPage_ != UiPage::Glance) showPage(UiPage::Glance);
-  else if (!glance_.socLbl && !glance_.arc) uiGlanceBuild(shell_, glance_, layoutId);
-  uiShellSetHeader(shell_, g.title, uiClockHeaderRight(g));
+  showPage(UiPage::Glance);
+  if (!shell_.root) return;
+  if (uiGlanceNeedsBuild(glance_, layoutId)) uiGlanceBuild(shell_, glance_, layoutId);
+  uiShellSetPage(shell_, UiPage::Glance);
+  uiShellSetGlanceHeader(shell_, g);
   uiGlanceUpdate(glance_, g, stale, gridAlert, layoutId);
 }
 
@@ -86,28 +97,32 @@ void UiLv::pulseGlanceGrid(bool gridAlert, uint32_t animMs) {
   uiGlancePulseGrid(glance_, gridAlert, animMs);
 }
 
+void UiLv::animateGlanceBattery(const GlanceData& g, uint32_t animMs) {
+  uiGlanceAnimateBattery(glance_, g, animMs);
+}
+
 void UiLv::updateBms(const BmsData& b) {
-  if (currentPage_ != UiPage::Bms) showPage(UiPage::Bms);
-  else if (!bms_.summary) uiBmsBuild(shell_, bms_);
-  uiShellSetHeader(shell_, "BMS", "");
+  showPage(UiPage::Bms);
+  if (!shell_.root) return;
+  uiShellSetPage(shell_, UiPage::Bms);
+  uiShellSetHeader(shell_, LV_SYMBOL_BATTERY_FULL " Battery", b.ok ? "BMS" : "N/A");
   uiBmsUpdate(bms_, b);
 }
 
 void UiLv::updateHistory(const HistoryData& h) {
-  if (currentPage_ != UiPage::History) showPage(UiPage::History);
-  else if (!history_.chart) uiHistoryBuild(shell_, history_);
-  uiShellSetHeader(shell_, "History", "");
+  showPage(UiPage::History);
+  if (!shell_.root) return;
+  uiShellSetPage(shell_, UiPage::History);
+  uiShellSetHeader(shell_, LV_SYMBOL_LIST " History", String(h.hours) + "h");
   uiHistoryUpdate(history_, h);
 }
 
 void UiLv::updateSettings(const HostSettings& s, bool wifiOk, const String& wifiSsid, const String& statusMsg,
                           const String& otaStatus, UiSettingsTab tab, const char* fwVersion) {
-  if (currentPage_ != UiPage::Settings) {
-    uiShellCreate(shell_, UiPage::Settings, true);
-    shellActive_ = true;
-    currentPage_ = UiPage::Settings;
-  }
-  uiShellSetHeader(shell_, "Settings", "");
+  showPage(UiPage::Settings);
+  if (!shell_.root) return;
+  uiShellSetPage(shell_, UiPage::Settings);
+  uiShellSetHeader(shell_, LV_SYMBOL_SETTINGS " Settings", wifiOk ? "Connected" : "Offline");
   uiSettingsBuild(shell_, settings_, tab, s, wifiOk, wifiSsid, statusMsg, otaStatus, fwVersion);
 }
 

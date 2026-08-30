@@ -9,9 +9,10 @@ lv_style_t uiStyleNavBtn;
 lv_style_t uiStyleNavBtnActive;
 lv_style_t uiStyleAccent;
 
-static const lv_font_t* s_fontBody = &lv_font_montserrat_14;
-static const lv_font_t* s_fontTitle = &lv_font_montserrat_14;
+static const lv_font_t* s_fontBody = &lv_font_montserrat_16;
+static const lv_font_t* s_fontTitle = &lv_font_montserrat_16;
 static const lv_font_t* s_fontDisplay = &lv_font_montserrat_20;
+static const lv_font_t* s_fontSoc = &lv_font_montserrat_48;
 
 lv_color_t uiColor565(uint16_t c) {
   const uint8_t r = (uint8_t)(((c >> 11) & 0x1F) << 3);
@@ -23,6 +24,7 @@ lv_color_t uiColor565(uint16_t c) {
 const lv_font_t* uiFontBody() { return s_fontBody; }
 const lv_font_t* uiFontTitle() { return s_fontTitle; }
 const lv_font_t* uiFontDisplay() { return s_fontDisplay; }
+const lv_font_t* uiFontSoc() { return s_fontSoc; }
 
 static void initStyle(lv_style_t* st) {
   lv_style_init(st);
@@ -32,11 +34,13 @@ void uiThemeRefreshStyles() {
   const ThemePalette& t = themeActive();
 
   lv_style_set_bg_color(&uiStyleScreen, uiColor565(t.bg));
+  lv_style_set_bg_opa(&uiStyleScreen, LV_OPA_COVER);
   lv_style_set_text_color(&uiStyleScreen, uiColor565(t.text));
   lv_style_set_border_width(&uiStyleScreen, 0);
   lv_style_set_pad_all(&uiStyleScreen, 0);
 
   lv_style_set_bg_color(&uiStyleCard, uiColor565(t.card));
+  lv_style_set_bg_opa(&uiStyleCard, LV_OPA_COVER);
   lv_style_set_border_color(&uiStyleCard, uiColor565(t.line));
   lv_style_set_border_width(&uiStyleCard, 1);
   lv_style_set_radius(&uiStyleCard, 8);
@@ -44,6 +48,7 @@ void uiThemeRefreshStyles() {
   lv_style_set_text_color(&uiStyleCard, uiColor565(t.text));
 
   lv_style_set_bg_color(&uiStyleHeader, uiColor565(t.header));
+  lv_style_set_bg_opa(&uiStyleHeader, LV_OPA_COVER);
   lv_style_set_text_color(&uiStyleHeader, uiColor565(t.text));
   lv_style_set_border_color(&uiStyleHeader, uiColor565(t.line));
   lv_style_set_border_width(&uiStyleHeader, 0);
@@ -88,6 +93,9 @@ lv_color_t uiSocColor(float soc) {
 }
 
 void uiThemeInitOnce() {
+  static bool done = false;
+  if (done) return;
+  done = true;
   initStyle(&uiStyleScreen);
   initStyle(&uiStyleCard);
   initStyle(&uiStyleHeader);
