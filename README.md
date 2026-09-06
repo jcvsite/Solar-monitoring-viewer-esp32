@@ -1,7 +1,6 @@
 # Solar Monitoring Viewer (ESP32)
 
-> **Firmware home:** [github.com/jcvsite/Solar-monitoring-viewer-esp32](https://github.com/jcvsite/Solar-monitoring-viewer-esp32)  
-> This copy in `solar-monitoring/esp32_display/` tracks development; releases and OTA are published from the viewer repo.
+> Companion display for **[solar-monitoring](https://github.com/jcvsite/solar-monitoring)**. This repository is the sole home for the ESP32 / CYD firmware (build, flash, OTA releases).
 
 Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/solar-monitoring)**.
 
@@ -216,7 +215,7 @@ All can poll the same solar-monitoring host — the APIs are stateless.
 ## For developers
 
 - **Logo bitmap:** boot splash uses the unmodified **192×192** icon from `static/icons/icon-192x192.png` (RGB565 embed only). Regenerate with:
-  `python esp32_display/scripts/png_to_logo_header.py`
+  `python scripts/png_to_logo_header.py`
 - APIs: `GET /api/display`, `/api/display/bms`, `/api/display/history?hours=24`  
   Glance payload includes `clock`, `timezone`, `tz_offset_sec`, and `weather` (Open-Meteo, cached on the host).  
   The display uses the host timezone for NTP and shows the server `clock` string in the header.
