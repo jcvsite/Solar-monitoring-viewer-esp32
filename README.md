@@ -5,36 +5,20 @@
 Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/solar-monitoring)**.
 
 <p align="center">
-  <img src="docs/esp32-glance-ui.png" alt="CYD ESP32 Glance display - Classic layout on device" width="360"/>
+  <img src="docs/esp32-glance-orientations.png" alt="CYD Glance - Classic layout portrait and landscape" width="720"/>
 </p>
 
-> **Cheap Yellow Display** (CYD, 240x320) running firmware **v0.3.2** - Classic Glance layout (LVGL): SOC, GRID status, PV/Load/Grid/Today cards, icon bottom nav.
-
-**Glance screen - Classic layout (portrait 240x320, LVGL v0.3.2):**
-
-```text
-┌──────────────────────────────┐
-│ My Home Solar    ☀ 32°C  3:36 PM │  title + weather + server clock
-│ ● GRID OK  (or NO GRID blink)│  grid status chip
-│      [battery]    78%        │  centered battery + large white SOC
-│        Charging 450 W        │
-│ ☀ PV                  3.4 kW │  right-aligned values + caption icons
-│ ⌂ LOAD                0.8 kW │
-│ ⇄ GRID               120 W   │
-│ Today PV 12.6   Load 6.8     │
-│  🏠   🔋   📊   ⚙           │  icon-only bottom nav (accent + dot)
-└──────────────────────────────┘
-```
+<p align="center">
+  <em>Cheap Yellow Display (CYD, 240x320) - Classic Glance on device, portrait and landscape (firmware v0.3.2)</em>
+</p>
 
 | | |
 |---|---|
 | **What it does** | Shows live SOC, PV / load / grid, BMS detail, and a simple history sparkline |
-| **How it talks** | HTTP to your solar-monitoring PC (`/api/display`) — no cloud |
+| **How it talks** | HTTP to your solar-monitoring PC (`/api/display`) - no cloud |
 | **How you set WiFi** | On-screen touch picker + keyboard, or phone browser fallback (SoftAP) |
-| **Hardware** | ESP32-2432S028R **Cheap Yellow Display** (CYD), 2.8″ 240×320 touch |
-| **Many boards?** | Yes — each device has a unique setup AP name |
-
-This folder is self-contained and can later become its **own GitHub repository**.
+| **Hardware** | ESP32-2432S028R **Cheap Yellow Display** (CYD), 2.8" 240×320 touch |
+| **Many boards?** | Yes - each device has a unique setup AP name |
 
 ---
 
@@ -42,11 +26,11 @@ This folder is self-contained and can later become its **own GitHub repository**
 
 ### Supported hardware
 
-This firmware targets the **ESP32 Cheap Yellow Display (CYD)** — commonly sold as **ESP32-2432S028** / **ESP32-2432S028R** (board label **HW-458**).
+This firmware targets the **ESP32 Cheap Yellow Display (CYD)** - commonly sold as **ESP32-2432S028** / **ESP32-2432S028R** (board label **HW-458**).
 
 | | |
 |---|---|
-| **Display** | 2.8″ ILI9341 color TFT, **240×320** pixels |
+| **Display** | 2.8" ILI9341 color TFT, **240×320** pixels |
 | **Touch** | XPT2046 resistive (separate SPI bus from the LCD) |
 | **MCU** | ESP32 (dual-core, typically **4 MB** flash) |
 | **USB** | Micro-USB (CH340 or CP2102 serial) |
@@ -118,7 +102,7 @@ pio device monitor
 ```
 
 If upload fails, hold **BOOT**, start upload, release when writing begins.  
-Default pins match common CYD 2.8″ boards (`platformio.ini`). Change `build_flags` if your seller’s wiki differs.
+Default pins match common CYD 2.8" boards (`platformio.ini`). Change `build_flags` if your seller’s wiki differs.
 
 ---
 
@@ -126,9 +110,9 @@ Default pins match common CYD 2.8″ boards (`platformio.ini`). Change `build_fl
 
 No need to edit `secrets.h` for normal use.
 
-### Option A — On the display (recommended)
+### Option A - On the display (recommended)
 
-Use the built-in touch UI — no phone required.
+Use the built-in touch UI - no phone required.
 
 1. Power the display (USB). If WiFi is not configured, the **WiFi network list** opens automatically.  
 2. Wait for **Scanning…** to finish (a few seconds).  
@@ -142,7 +126,7 @@ Use the built-in touch UI — no phone required.
 
 To change WiFi later: **Settings → WiFi Setup**.
 
-### Option B — Phone browser (fallback)
+### Option B - Phone browser (fallback)
 
 Useful if touch calibration is off or you prefer a full phone keyboard.
 
@@ -152,7 +136,7 @@ Useful if touch calibration is off or you prefer a full phone keyboard.
 
 1. From **Settings → WiFi Setup**, tap **Phone** (or wait on the phone portal screen during SoftAP mode).  
 2. On your phone, join the open AP named like **`SolarDisplay-Setup-A1B2`**  
-   (suffix is unique per board — set up **one device at a time**).  
+   (suffix is unique per board - set up **one device at a time**).  
 3. The captive portal should open automatically; if not, browse to **http://192.168.4.1**.  
 4. Pick your home WiFi from the dropdown, enter the password (large touch-friendly fields), and **Save**.  
 5. The display joins your LAN, then searches for solar-monitoring (**mDNS**, then subnet scan).  
@@ -182,7 +166,7 @@ Touch the bottom tabs:
 | **Glance** | Title, **weather + temperature**, **clock in host `LOCAL_TIMEZONE`**, centered battery icon + large **SOC**, animated fill when charging/discharging, PV / Load / Grid with icons, today kWh. **Red “NO GRID” blink** every 5 s when grid is offline |
 | **BMS** | Pack stats, temps, cell delta; color-coded cell voltage bars with min/max markers and centered voltage labels |
 | **Hist** | PV & load sparkline (compact chart) + today’s energy totals with color icons |
-| **Set** | Scrollable panels — host IP, **FIND** (discover), **Manual**, **WiFi Setup**, firmware OTA, settings PIN. Color icons on rows and tabs |
+| **Set** | Scrollable panels - host IP, **FIND** (discover), **Manual**, **WiFi Setup**, firmware OTA, settings PIN. Color icons on rows and tabs |
 
 ```text
 ESP32 display  --HTTP GET /api/display-->  solar-monitoring :8081
@@ -194,7 +178,7 @@ ESP32 display  --HTTP GET /api/display-->  solar-monitoring :8081
 ## Multiple displays
 
 Supported. Each board has its own SoftAP name and hostname (from chip ID).  
-All can poll the same solar-monitoring host — the APIs are stateless.
+All can poll the same solar-monitoring host - the APIs are stateless.
 
 ---
 
@@ -206,7 +190,7 @@ All can poll the same solar-monitoring host — the APIs are stateless.
 | Stuck on WiFi Setup | Tap **Rescan**; check 2.4 GHz network; try **Phone** fallback; join exact AP name `SolarDisplay-Setup-XXXX` |
 | Wrong WiFi password | Tap network again → re-enter password; use **Show** to verify characters |
 | WiFi OK but no data | Confirm host web dashboard is running; Settings → **FIND**; same LAN/VLAN |
-| Wrong colors / white screen | Pin map mismatch — check seller wiki vs `platformio.ini` |
+| Wrong colors / white screen | Pin map mismatch - check seller wiki vs `platformio.ini` |
 | Touch not working | CYD uses a **separate SPI bus** for touch (GPIO 25/32/39/33/36). See [CYD TouchTest](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display/tree/main/Examples/Basics/2-TouchTest). Tune `TOUCH_MAP_*`, `TOUCH_SWAP_XY`, `TOUCH_MIRROR_X/Y` in `include/config.h` |
 | Touch upside down / offset | Adjust `TOUCH_MIRROR_X` / `TOUCH_MIRROR_Y` / `TOUCH_SWAP_XY` in `include/config.h` |
 
@@ -222,6 +206,6 @@ All can poll the same solar-monitoring host — the APIs are stateless.
 - Discovery: mDNS service `_solar-monitoring._tcp` (TXT includes `api_version`, paths)  
 - Stack: PlatformIO, **LVGL 8.x**, TFT_eSPI (display flush), ArduinoJson, WiFiManager, XPT2046  
 
-**Split to its own repo:** copy this folder; keep the HTTP + mDNS contract documented — no Python code is required in that repo.
+**Split to its own repo:** copy this folder; keep the HTTP + mDNS contract documented - no Python code is required in that repo.
 
 Home Assistant auto-discovery via the same mDNS TXT is planned as a **separate** custom-component project.
