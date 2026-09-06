@@ -14,7 +14,10 @@ class GitOta {
   void begin();
   void configure(const String& host, uint16_t port, const String& token, bool check, bool autoInstall);
   bool checkUpdateInfo(UpdateInfo& out);
-  bool installLatest(String& statusOut);
+  // Install latest (or pendingTag_). force=true skips "remote newer" gate (host force-update).
+  bool installLatest(String& statusOut, bool force = false);
+  bool remoteIsNewer(const String& remoteTag) const;
+  void setPendingTag(const String& tag) { pendingTag_ = tag; }
   void loop();
   const String& status() const { return status_; }
   bool busy() const { return busy_; }

@@ -354,7 +354,7 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
       break;
     case UiActionId::OtaCheckNow: {
       String st;
-      gitOta.installLatest(st);
+      gitOta.installLatest(st, false);
       otaStatus = st;
       needRedraw = true;
       break;
@@ -736,7 +736,10 @@ static void applyHostSettingsFromConfig(const DisplayConfig& cfg) {
   }
   if (cfg.force_update) {
     String st;
-    gitOta.installLatest(st);
+    if (cfg.force_update_version.length()) {
+      gitOta.setPendingTag(cfg.force_update_version);
+    }
+    gitOta.installLatest(st, true);
     otaStatus = st;
   }
 }

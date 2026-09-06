@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-07
+
+### Added
+- Semver OTA gating: Check now / auto-install only flash when remote version is newer.
+- Host force-update can target `force_update_version`.
+
+### Changed
+- Firmware version **0.3.2**.
+
+### Fixed
+- Avoid silent downgrade when GitHub latest is older than the flashed build.
+
+
 ### Added
 - **Host poll worker** (host_poll): FreeRTOS task fetches Glance/BMS/History off the UI thread.
 - **SOC fonts**: custom lv_font_soc_40/48/73 for Classic and landscape glance layouts.
