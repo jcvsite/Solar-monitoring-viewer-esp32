@@ -5,12 +5,12 @@
 Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/solar-monitoring)**.
 
 <p align="center">
-  <img src="docs/esp32-glance-ui.png" alt="Early design concept — see layout below for the actual firmware UI" width="320"/>
+  <img src="docs/esp32-glance-ui.png" alt="CYD ESP32 Glance display - Classic layout on device" width="360"/>
 </p>
 
-> The photo above is an **early design mockup**. Firmware **v0.3.0+** uses **LVGL** for card-based UI aligned with the web dashboard mockups (themes, layouts, animated SOC/grid alert).
+> **Cheap Yellow Display** (CYD, 240x320) running firmware **v0.3.2** - Classic Glance layout (LVGL): SOC, GRID status, PV/Load/Grid/Today cards, icon bottom nav.
 
-**Actual Glance screen — Classic layout (portrait 240×320, LVGL v0.3.2):**
+**Glance screen - Classic layout (portrait 240x320, LVGL v0.3.2):**
 
 ```text
 ┌──────────────────────────────┐
