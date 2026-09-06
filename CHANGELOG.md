@@ -10,9 +10,11 @@
 
 ### Changed
 - Firmware version **0.3.2**.
+- **OTA is host-independent**: device fetches GitHub releases over HTTPS directly (no solar-monitoring proxy / `urlopen`).
 
 ### Fixed
 - Avoid silent downgrade when GitHub latest is older than the flashed build.
+- Update failures caused by host PC GitHub/SSL errors.
 
 
 ### Added
