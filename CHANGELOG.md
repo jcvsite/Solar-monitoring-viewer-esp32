@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Host poll worker** (host_poll): FreeRTOS task fetches Glance/BMS/History off the UI thread.
+- **SOC fonts**: custom lv_font_soc_40/48/73 for Classic and landscape glance layouts.
+- **`battery_charge_state`**: glance API field drives charge / discharge / float animation (matches solar-monitoring display API).
+
+### Changed
+- Firmware version **0.3.2** (platformio.ini, webflash manifest).
+- Glance / BMS / shell / touch / LVGL port polish for landscape and Classic layout.
+
+### Fixed
+- Battery flow direction prefers host `battery_charge_state` over power-sign guesses.
+
 ## [0.3.1] - 2026-08-31
 
 ### Added
