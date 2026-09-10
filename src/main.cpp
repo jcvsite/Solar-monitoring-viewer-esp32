@@ -399,20 +399,14 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
     case UiActionId::ToggleUseHostConfig:
       settings.useHostConfig = !settings.useHostConfig;
       store.save(settings);
-      if (settings.useHostConfig) pollDisplayConfig(true);
+      if (settings.useHostConfig) pollDisplayConfig(true);  // queues worker; never blocks UI
       needRedraw = true;
       break;
-    case UiActionId::OtaCheckNow: {
-      otaStatus = "Checking...";
-      needRedraw = true;
-      refreshCurrentPage();
-      flushUi();
-      String st;
-      gitOta.installLatest(st, false);
-      otaStatus = st;
+    case UiActionId::OtaCheckNow:
+      gitOta.requestCheckNow(false);
+      otaStatus = gitOta.status();
       needRedraw = true;
       break;
-    }
     case UiActionId::PinDigit:
       if (pinEntry.length() < 4) {
         pinEntry += String(ctx.digit);
@@ -829,12 +823,11 @@ static void handlePinPadCommon(bool forSet) {
 static void applyHostSettingsFromConfig(const DisplayConfig& cfg) {
   bool changed = false;
   const bool revBump = cfg.config_rev > settings.configRev;
+  // All host-driven prefs only apply on config_rev bump so local Settings taps
+  // (grid alert, OTA toggles, etc.) are not overwritten / redrawn every poll.
   if (revBump) {
     settings.configRev = cfg.config_rev;
     changed = true;
-  }
-  // Visual prefs only follow the host when it bumps config_rev.
-  if (revBump) {
     if (settings.glanceLayout != cfg.glance_layout) {
       settings.glanceLayout = cfg.glance_layout;
       changed = true;
@@ -858,26 +851,26 @@ static void applyHostSettingsFromConfig(const DisplayConfig& cfg) {
       applyEffectiveBrightness();
       changed = true;
     }
-  }
-  if (settings.pollMs != cfg.poll_ms) {
-    settings.pollMs = cfg.poll_ms;
-    changed = true;
-  }
-  if (settings.checkForUpdate != cfg.check_for_update) {
-    settings.checkForUpdate = cfg.check_for_update;
-    changed = true;
-  }
-  if (settings.autoInstallUpdate != cfg.auto_install_update) {
-    settings.autoInstallUpdate = cfg.auto_install_update;
-    changed = true;
-  }
-  if (settings.gridOfflineAlert != cfg.grid_offline_alert) {
-    settings.gridOfflineAlert = cfg.grid_offline_alert;
-    changed = true;
-  }
-  if (settings.useHostConfig && cfg.settings_pin != settings.settingsPin) {
-    settings.settingsPin = cfg.settings_pin;
-    changed = true;
+    if (settings.pollMs != cfg.poll_ms) {
+      settings.pollMs = cfg.poll_ms;
+      changed = true;
+    }
+    if (settings.checkForUpdate != cfg.check_for_update) {
+      settings.checkForUpdate = cfg.check_for_update;
+      changed = true;
+    }
+    if (settings.autoInstallUpdate != cfg.auto_install_update) {
+      settings.autoInstallUpdate = cfg.auto_install_update;
+      changed = true;
+    }
+    if (settings.gridOfflineAlert != cfg.grid_offline_alert) {
+      settings.gridOfflineAlert = cfg.grid_offline_alert;
+      changed = true;
+    }
+    if (cfg.settings_pin != settings.settingsPin) {
+      settings.settingsPin = cfg.settings_pin;
+      changed = true;
+    }
   }
   gitOta.configure(settings.hostIp, settings.hostPort, settings.token, settings.checkForUpdate,
                    settings.autoInstallUpdate);
@@ -887,27 +880,29 @@ static void applyHostSettingsFromConfig(const DisplayConfig& cfg) {
     needRedraw = true;
   }
   if (cfg.force_update) {
-    String st;
     if (cfg.force_update_version.length()) {
       gitOta.setPendingTag(cfg.force_update_version);
     }
-    gitOta.installLatest(st, true);
-    otaStatus = st;
+    gitOta.requestCheckNow(true);
+    otaStatus = gitOta.status();
   }
 }
 
+// Queue only — HTTP runs on hostPoll worker so Settings taps never freeze.
 static void pollDisplayConfig(bool force) {
   if (!settings.useHostConfig) return;
   if (!force && millis() - lastConfigPoll < 30000) return;
-  lastConfigPoll = millis();
   if (settings.hostIp.length() == 0 || WiFi.status() != WL_CONNECTED) return;
-  DisplayConfig cfg;
-  if (api.fetchDisplayConfig(settings.hostIp, settings.hostPort, settings.token, cfg)) {
-    applyHostSettingsFromConfig(cfg);
-  }
+  lastConfigPoll = millis();
+  hostPollRequestConfig();
 }
 
 static void applyHostPollResults() {
+  DisplayConfig cfg;
+  if (hostPollTakeConfig(cfg)) {
+    applyHostSettingsFromConfig(cfg);
+  }
+
   GlanceData g;
   if (hostPollTakeGlance(g)) {
     if (g.tz_offset_sec >= -43200 && g.tz_offset_sec <= 50400) {
@@ -1043,9 +1038,29 @@ void loop() {
     needRedraw = true;
   }
 
+  // Paint Settings/toggle feedback before any host/OTA work so taps never feel stuck.
+  if (needRedraw) {
+    needRedraw = false;
+    refreshCurrentPage();
+    lvglPortResetInput();
+    if (s_pollAfterUi) {
+      s_pollAfterUi = false;
+      pollIfDue(true);
+    }
+  }
+
   deviceWeb.loop();
   gitOta.loop();
-  otaStatus = gitOta.status();
+  {
+    const String st = gitOta.status();
+    if (st != otaStatus) {
+      otaStatus = st;
+      // Avoid full Settings rebuild (destroys tabview / feels stuck); refresh label only.
+      if (page == UiPage::Settings && settingsTab == UiSettingsTab::Updates) {
+        ui.updateSettingsOtaStatus(otaStatus);
+      }
+    }
+  }
 
   if (page == UiPage::FindingHost && discovery.isSearching()) {
     if (discovery.tickSearch(api, settings.token, found)) {
@@ -1057,7 +1072,8 @@ void loop() {
   const bool stale = (lastGood == 0) || (millis() - lastGood > STALE_MS);
   if (stale != wasStale) {
     wasStale = stale;
-    needRedraw = true;
+    // Stale banner only matters on Glance — don't nuke Settings mid-tap.
+    if (page == UiPage::Glance) needRedraw = true;
   }
 
   pollIfDue(false);

@@ -9,9 +9,11 @@ struct UiSettingsWidgets {
   lv_obj_t* tabs = nullptr;
   lv_obj_t* connPanel = nullptr;
   lv_obj_t* updPanel = nullptr;
+  lv_obj_t* otaStatusLbl = nullptr;
 };
 
 void uiSettingsBuild(UiShellWidgets& shell, UiSettingsWidgets& s, UiSettingsTab tab, const HostSettings& cfg,
                      bool wifiOk, const String& wifiSsid, const String& statusMsg, const String& otaStatus,
                      const char* fwVersion);
 void uiSettingsSetTab(UiSettingsWidgets& s, UiSettingsTab tab);
+void uiSettingsUpdateOtaStatus(UiSettingsWidgets& s, const String& otaStatus);

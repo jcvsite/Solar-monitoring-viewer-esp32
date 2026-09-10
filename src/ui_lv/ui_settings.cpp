@@ -171,8 +171,8 @@ static void buildConnPanel(lv_obj_t* panel, const UiShellWidgets& shell, const H
   addBtn(panel, LV_SYMBOL_WIFI, uiColor565(t.gridImport), "WiFi Setup", UiActionId::StartWifiScan, sw, rowH);
 }
 
-static void buildUpdPanel(lv_obj_t* panel, const UiShellWidgets& shell, const HostSettings& cfg, const String& otaStatus,
-                          const char* fwVersion) {
+static void buildUpdPanel(lv_obj_t* panel, UiSettingsWidgets& s, const UiShellWidgets& shell, const HostSettings& cfg,
+                          const String& otaStatus, const char* fwVersion) {
   const ThemePalette& t = themeActive();
   const lv_coord_t sw = panelW(shell);
   const lv_coord_t rowH = 36;
@@ -187,7 +187,7 @@ static void buildUpdPanel(lv_obj_t* panel, const UiShellWidgets& shell, const Ho
   lv_obj_set_style_pad_row(card, 2, 0);
   addCardTitle(card, LV_SYMBOL_DOWNLOAD, uiColor565(t.charge), "Firmware");
   uiMakeLabel(card, (String("Version ") + fwVersion).c_str(), uiFontBody(), uiColor565(t.text));
-  uiMakeLabel(card, otaStatus.c_str(), uiFontBody(), uiColor565(t.muted));
+  s.otaStatusLbl = uiMakeLabel(card, otaStatus.c_str(), uiFontBody(), uiColor565(t.muted));
 
   addBtn(panel, LV_SYMBOL_REFRESH, uiColor565(t.pv), cfg.checkForUpdate ? "Check updates: ON" : "Check updates: OFF",
          UiActionId::ToggleCheckUpdate, sw, rowH);
@@ -237,11 +237,16 @@ void uiSettingsBuild(UiShellWidgets& shell, UiSettingsWidgets& s, UiSettingsTab 
   }
   lv_obj_add_event_cb(s.tabs, settingsTabChanged, LV_EVENT_VALUE_CHANGED, nullptr);
   buildConnPanel(s.connPanel, shell, cfg, wifiOk, wifiSsid, statusMsg);
-  buildUpdPanel(s.updPanel, shell, cfg, otaStatus, fwVersion);
+  buildUpdPanel(s.updPanel, s, shell, cfg, otaStatus, fwVersion);
   uiSettingsSetTab(s, tab);
 }
 
 void uiSettingsSetTab(UiSettingsWidgets& s, UiSettingsTab tab) {
   if (!s.tabs) return;
   lv_tabview_set_act(s.tabs, tab == UiSettingsTab::Updates ? 1 : 0, LV_ANIM_OFF);
+}
+
+void uiSettingsUpdateOtaStatus(UiSettingsWidgets& s, const String& otaStatus) {
+  if (!s.otaStatusLbl) return;
+  uiSetLabelText(s.otaStatusLbl, otaStatus.c_str());
 }

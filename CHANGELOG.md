@@ -19,6 +19,7 @@
 - Theme/layout Settings rows corrupted NVS (`index = -1`) and never opened the picker; theme changes now rebuild Glance/shell so Home repaints.
 - LVGL active-screen delete crashes on setup/PIN screens; Glance `gridPill` double-free after shell teardown.
 - Settings tab taps interrupted by glance redraw; swipe exclusion over the tab bar.
+- Settings freeze after toggles (e.g. Grid alert / Check now): host config + OTA work no longer block the UI thread; host prefs only sync on `config_rev` bump; OTA status updates the label without rebuilding the tabview.
 - WiFi boot stuck on splash / SoftAP without UI tick; reconnect backoff after drops.
 - Landscape History/BMS clipping; PIN pad overlapping Back; label truncation on SSID/host/metrics.
 

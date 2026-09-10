@@ -152,6 +152,10 @@ void UiLv::updateSettings(const HostSettings& s, bool wifiOk, const String& wifi
   uiSettingsBuild(shell_, settings_, tab, s, wifiOk, wifiSsid, statusMsg, otaStatus, fwVersion);
 }
 
+void UiLv::updateSettingsOtaStatus(const String& otaStatus) {
+  uiSettingsUpdateOtaStatus(settings_, otaStatus);
+}
+
 void UiLv::showPickList(const char* title, const char* const* names, int count, int selected, bool isTheme) {
   (void)isTheme;
   shellActive_ = false;

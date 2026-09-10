@@ -4,6 +4,9 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 
 #ifndef FW_VERSION
 #define FW_VERSION "0.0.0"
@@ -13,6 +16,9 @@ static const char* kGithubRepo = "jcvsite/Solar-monitoring-viewer-esp32";
 static const char* kAssetPrefix = "solar-viewer-cyd_esp32";
 
 GitOta gitOta;
+
+static SemaphoreHandle_t s_otaMutex = nullptr;
+static TaskHandle_t s_otaTask = nullptr;
 
 static void parseSemver(const String& s, int& maj, int& mino, int& pat) {
   String t = s;
@@ -61,12 +67,70 @@ static String normalizeGithubTag(const String& tag) {
   return t;
 }
 
-void GitOta::begin() { status_ = "Ready"; }
+void gitOtaTask(void* arg) {
+  GitOta* self = static_cast<GitOta*>(arg);
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    if (self) self->runQueuedWork();
+  }
+}
+
+void GitOta::begin() {
+  status_ = "Ready";
+  if (!s_otaMutex) s_otaMutex = xSemaphoreCreateMutex();
+  if (!s_otaTask) {
+    xTaskCreatePinnedToCore(gitOtaTask, "gitOta", 16384, this, 1, &s_otaTask, 0);
+  }
+}
 
 void GitOta::configure(const String& /*host*/, uint16_t /*port*/, const String& /*token*/, bool check,
                        bool autoInstall) {
   check_ = check;
   autoInstall_ = autoInstall;
+}
+
+void GitOta::setStatus(const String& s) {
+  if (s_otaMutex && xSemaphoreTake(s_otaMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    status_ = s;
+    xSemaphoreGive(s_otaMutex);
+  } else {
+    status_ = s;
+  }
+}
+
+String GitOta::status() const {
+  if (s_otaMutex && xSemaphoreTake(s_otaMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    String out = status_;
+    xSemaphoreGive(s_otaMutex);
+    return out;
+  }
+  return status_;
+}
+
+bool GitOta::busy() const { return busy_; }
+
+void GitOta::setPendingTag(const String& tag) {
+  if (s_otaMutex && xSemaphoreTake(s_otaMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    pendingTag_ = tag;
+    pendingUrl_ = "";
+    xSemaphoreGive(s_otaMutex);
+  } else {
+    pendingTag_ = tag;
+    pendingUrl_ = "";
+  }
+}
+
+void GitOta::requestCheckNow(bool force) {
+  if (busy_ || pending_) {
+    setStatus("Busy...");
+    return;
+  }
+  pendingForce_ = force;
+  pendingPeriodic_ = false;
+  pending_ = true;
+  busy_ = true;
+  setStatus("Checking...");
+  if (s_otaTask) xTaskNotifyGive(s_otaTask);
 }
 
 bool GitOta::fetchGithubRelease(const String& tag, UpdateInfo& out) {
@@ -156,30 +220,29 @@ bool GitOta::remoteIsNewer(const String& remoteTag) const {
 bool GitOta::installFromUrl(const String& url, String& statusOut) {
   if (!url.length()) {
     statusOut = "No asset URL";
+    setStatus(statusOut);
     return false;
   }
-  busy_ = true;
-  status_ = "Downloading...";
+  setStatus("Downloading...");
   WiFiClientSecure client;
   client.setInsecure();
   httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   httpUpdate.rebootOnUpdate(true);
-  status_ = "Installing...";
+  setStatus("Installing...");
   t_httpUpdate_return ret = httpUpdate.update(client, url, "");
-  busy_ = false;
   switch (ret) {
     case HTTP_UPDATE_OK:
       statusOut = "Updated to " + (pendingTag_.length() ? pendingTag_ : String(FW_VERSION));
-      status_ = statusOut;
+      setStatus(statusOut);
       return true;
     case HTTP_UPDATE_NO_UPDATES:
       statusOut = "Already current";
-      status_ = statusOut;
+      setStatus(statusOut);
       return false;
     case HTTP_UPDATE_FAILED:
     default:
       statusOut = String("Update failed: ") + httpUpdate.getLastErrorString();
-      status_ = statusOut;
+      setStatus(statusOut);
       return false;
   }
 }
@@ -187,19 +250,34 @@ bool GitOta::installFromUrl(const String& url, String& statusOut) {
 bool GitOta::installLatest(String& statusOut, bool force) {
   if (WiFi.status() != WL_CONNECTED) {
     statusOut = "No WiFi";
-    status_ = statusOut;
+    setStatus(statusOut);
     return false;
   }
 
   UpdateInfo info;
-  const String wantTag = pendingTag_;
+  String wantTag;
+  if (s_otaMutex && xSemaphoreTake(s_otaMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    wantTag = pendingTag_;
+    xSemaphoreGive(s_otaMutex);
+  } else {
+    wantTag = pendingTag_;
+  }
+
+  setStatus("Checking...");
   if (!fetchGithubRelease(wantTag, info) || !info.tag.length() || !info.assetUrl.length()) {
     statusOut = info.error.length() ? info.error : "No release";
-    status_ = statusOut;
+    setStatus(statusOut);
     return false;
   }
-  pendingTag_ = info.tag;
-  pendingUrl_ = info.assetUrl;
+
+  if (s_otaMutex && xSemaphoreTake(s_otaMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+    pendingTag_ = info.tag;
+    pendingUrl_ = info.assetUrl;
+    xSemaphoreGive(s_otaMutex);
+  } else {
+    pendingTag_ = info.tag;
+    pendingUrl_ = info.assetUrl;
+  }
 
   if (!force && !remoteIsNewer(info.tag)) {
     if (cmpSemver(info.tag, String(FW_VERSION)) == 0) {
@@ -207,32 +285,62 @@ bool GitOta::installLatest(String& statusOut, bool force) {
     } else {
       statusOut = "Remote older (" + info.tag + "), keeping " FW_VERSION;
     }
-    status_ = statusOut;
+    setStatus(statusOut);
     return false;
   }
 
-  return installFromUrl(pendingUrl_, statusOut);
+  return installFromUrl(info.assetUrl, statusOut);
+}
+
+void GitOta::runQueuedWork() {
+  const bool periodic = pendingPeriodic_;
+  const bool force = pendingForce_;
+  pending_ = false;
+  pendingPeriodic_ = false;
+  busy_ = true;
+
+  String st;
+  if (periodic) {
+    setStatus("Checking...");
+    UpdateInfo info;
+    if (!checkUpdateInfo(info) || !info.tag.length()) {
+      setStatus(info.error.length() ? info.error : "Check failed");
+      busy_ = false;
+      return;
+    }
+    if (!remoteIsNewer(info.tag)) {
+      setStatus("Up to date (" FW_VERSION ")");
+      busy_ = false;
+      return;
+    }
+    setStatus("Update: " + info.tag);
+    if (s_otaMutex && xSemaphoreTake(s_otaMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      pendingTag_ = info.tag;
+      pendingUrl_ = info.assetUrl;
+      xSemaphoreGive(s_otaMutex);
+    } else {
+      pendingTag_ = info.tag;
+      pendingUrl_ = info.assetUrl;
+    }
+    if (autoInstall_) {
+      installLatest(st, false);
+    }
+  } else {
+    installLatest(st, force);
+  }
+
+  busy_ = false;
 }
 
 void GitOta::loop() {
-  if (!check_ || busy_ || WiFi.status() != WL_CONNECTED) return;
+  if (pending_ || busy_ || !check_ || WiFi.status() != WL_CONNECTED) return;
   uint32_t interval = autoInstall_ ? 3600000UL : 86400000UL;
   if (millis() - lastCheckMs_ < interval && lastCheckMs_ != 0) return;
   lastCheckMs_ = millis();
-  UpdateInfo info;
-  if (!checkUpdateInfo(info) || !info.tag.length()) {
-    status_ = info.error.length() ? info.error : "Check failed";
-    return;
-  }
-  if (!remoteIsNewer(info.tag)) {
-    status_ = "Up to date (" FW_VERSION ")";
-    return;
-  }
-  status_ = "Update: " + info.tag;
-  pendingTag_ = info.tag;
-  pendingUrl_ = info.assetUrl;
-  if (autoInstall_) {
-    String st;
-    installLatest(st, false);
-  }
+  pendingForce_ = false;
+  pendingPeriodic_ = true;
+  pending_ = true;
+  busy_ = true;
+  setStatus("Checking...");
+  if (s_otaTask) xTaskNotifyGive(s_otaTask);
 }

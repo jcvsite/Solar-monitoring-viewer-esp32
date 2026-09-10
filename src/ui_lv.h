@@ -33,6 +33,7 @@ class UiLv {
   void updateHistory(const HistoryData& h);
   void updateSettings(const HostSettings& s, bool wifiOk, const String& wifiSsid, const String& statusMsg,
                       const String& otaStatus, UiSettingsTab tab, const char* fwVersion);
+  void updateSettingsOtaStatus(const String& otaStatus);
   void showPickList(const char* title, const char* const* names, int count, int selected, bool isTheme);
   void showHostChoice(const String& wifiSsid);
   void showFindingHost(const String& status);
