@@ -28,5 +28,8 @@ struct ThemePalette {
 };
 
 void themeSetActive(uint8_t id);
+uint8_t themeId();
 const ThemePalette& themeActive();
 const char* themeName(uint8_t id);
+const char* const* themeNames();
+uint8_t themeCount();

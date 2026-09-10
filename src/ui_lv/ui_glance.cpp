@@ -1,4 +1,4 @@
-#include "ui_glance.h"
+﻿#include "ui_glance.h"
 #include "../fonts/lv_font_soc_73.h"
 #include "../fonts/lv_font_soc_40.h"
 #include "../fonts/lv_font_soc_48.h"
@@ -17,7 +17,7 @@ static const lv_coord_t kBattCapW = 16;
 static const lv_coord_t kBattCapH = 5;
 static const lv_coord_t kSocRowH = kBattH + kBattCapH + 2; // tight to battery+nub; SOC font ~56 line
 static const lv_coord_t kClusterGap = 10;
-static const lv_color_t kSocWhite = lv_color_white();
+static lv_color_t socTextColor() { return uiColor565(themeActive().text); }
 // Active battery body inner height (landscape Classic may shrink this).
 static lv_coord_t s_battInnerH = kBattInnerH;
 
@@ -29,7 +29,7 @@ static lv_coord_t classicSocTextWidth(const char* num, const char* pct, const lv
   return numW + pctW + 2;
 }
 
-// Native montserrat sizes only — zoom was clipping the SOC off-screen.
+// Native montserrat sizes only â€” zoom was clipping the SOC off-screen.
 static const lv_font_t* pickClassicSocFont(const char* num, const char* pct, lv_coord_t maxW) {
   static const lv_font_t* kFonts[] = {
       &lv_font_soc_73, &lv_font_montserrat_48, &lv_font_montserrat_32, &lv_font_montserrat_28,
@@ -43,9 +43,9 @@ static const lv_font_t* pickClassicSocFont(const char* num, const char* pct, lv_
 
 static void applyClassicSocStyle(lv_obj_t* lbl, const lv_font_t* font) {
   lv_obj_set_style_text_font(lbl, font, 0);
-  lv_obj_set_style_text_color(lbl, kSocWhite, 0);
+  lv_obj_set_style_text_color(lbl, socTextColor(), 0);
   lv_obj_set_style_text_letter_space(lbl, -1, 0);
-  lv_obj_set_style_transform_zoom(lbl, 256, 0);  // 100% — no zoom
+  lv_obj_set_style_transform_zoom(lbl, 256, 0);  // 100% â€” no zoom
   lv_obj_set_style_shadow_width(lbl, 0, 0);
   lv_obj_clear_flag(lbl, LV_OBJ_FLAG_HIDDEN);
 }
@@ -119,6 +119,7 @@ static lv_obj_t* makeMetricCard(lv_obj_t* parent, lv_coord_t cardW, lv_coord_t c
 
   *valOut = uiMakeLabel(card, "--", uiFontTitle(), accent);
   lv_obj_set_width(*valOut, cardW - 10);
+  lv_label_set_long_mode(*valOut, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(*valOut, LV_TEXT_ALIGN_RIGHT, 0);
   return card;
 }
@@ -134,6 +135,7 @@ static lv_obj_t* makeMiniMetric(lv_obj_t* parent, lv_coord_t cardW, lv_coord_t c
   uiMakeLabel(card, title, uiFontBody(), uiColor565(themeActive().muted));
   *valOut = uiMakeLabel(card, "--", uiFontTitle(), accent);
   lv_obj_set_width(*valOut, cardW - 6);
+  lv_label_set_long_mode(*valOut, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(*valOut, LV_TEXT_ALIGN_CENTER, 0);
   return card;
 }
@@ -220,7 +222,7 @@ static void buildClassicLandscape(lv_obj_t* content, UiGlanceWidgets& g, lv_coor
   makeGridPill(left, leftW - 6, g);
   if (g.gridPill) lv_obj_set_style_pad_bottom(g.gridPill, 2, 0);
 
-  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, kSocWhite);
+  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, socTextColor());
   applyAltSocFont(g.socLbl, true);
   lv_obj_set_width(g.socLbl, leftW - 4);
   lv_obj_set_style_text_align(g.socLbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -280,7 +282,7 @@ static void buildCompactLandscape(lv_obj_t* content, UiGlanceWidgets& g, lv_coor
   const lv_coord_t rightW = contentW - leftW - 8;
   lv_obj_t* left = makeLandLeft(row, leftW, bodyH);
 
-  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, kSocWhite);
+  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, socTextColor());
   applyAltSocFont(g.socLbl, true);
   lv_obj_set_width(g.socLbl, leftW - 4);
   lv_obj_set_style_text_align(g.socLbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -334,7 +336,7 @@ static void buildRingLandscape(lv_obj_t* content, UiGlanceWidgets& g, lv_coord_t
   lv_obj_set_style_arc_width(g.arc, 10, LV_PART_INDICATOR);
   lv_obj_set_style_arc_color(g.arc, uiColor565(t.card), LV_PART_MAIN);
   lv_obj_set_style_arc_color(g.arc, uiSocColor(50), LV_PART_INDICATOR);
-  g.socLbl = uiMakeLabel(g.arc, "0%", &lv_font_soc_48, kSocWhite);
+  g.socLbl = uiMakeLabel(g.arc, "0%", &lv_font_soc_48, socTextColor());
   applyAltSocFont(g.socLbl, true);
   lv_obj_center(g.socLbl);
 
@@ -365,7 +367,7 @@ static void buildBarsLandscape(lv_obj_t* content, UiGlanceWidgets& g, lv_coord_t
   const lv_coord_t rightW = contentW - leftW - 8;
   lv_obj_t* left = makeLandLeft(row, leftW, bodyH);
 
-  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, kSocWhite);
+  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, socTextColor());
   applyAltSocFont(g.socLbl, true);
   lv_obj_set_width(g.socLbl, leftW - 4);
   lv_obj_set_style_text_align(g.socLbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -422,7 +424,7 @@ static void buildFlowLandscape(lv_obj_t* content, UiGlanceWidgets& g, lv_coord_t
   const lv_coord_t rightW = contentW - leftW - 8;
   lv_obj_t* left = makeLandLeft(row, leftW, bodyH);
 
-  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, kSocWhite);
+  g.socLbl = uiMakeLabel(left, "0%", &lv_font_soc_48, socTextColor());
   applyAltSocFont(g.socLbl, true);
   lv_obj_set_width(g.socLbl, leftW - 4);
   lv_obj_set_style_text_align(g.socLbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -488,8 +490,8 @@ static void buildClassicHome(lv_obj_t* content, UiGlanceWidgets& g, lv_coord_t c
   lv_obj_set_flex_align(socWrap, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_bottom(socWrap, 2, 0);
 
-  g.socLbl = uiMakeLabel(socWrap, "0", uiFontSoc(), kSocWhite);
-  g.socSubLbl = uiMakeLabel(socWrap, "%", uiFontSoc(), kSocWhite);
+  g.socLbl = uiMakeLabel(socWrap, "0", uiFontSoc(), socTextColor());
+  g.socSubLbl = uiMakeLabel(socWrap, "%", uiFontSoc(), socTextColor());
   lv_obj_set_style_pad_left(g.socSubLbl, 2, 0);
   fitClassicSocLabels(g, "100", "%");
 
@@ -511,11 +513,11 @@ static void buildClassicHome(lv_obj_t* content, UiGlanceWidgets& g, lv_coord_t c
 
   lv_obj_t* gridRow = lv_obj_create(content);
   lv_obj_remove_style_all(gridRow);
-  lv_obj_set_style_pad_top(gridRow, 8, 0);
-  lv_obj_set_size(gridRow, contentW, cardH * 2 + 14); // room for pad_top + pad_row
+  lv_obj_set_style_pad_top(gridRow, 4, 0);
+  lv_obj_set_size(gridRow, contentW, cardH * 2 + 10); // room for pad_top + pad_row
   lv_obj_set_flex_flow(gridRow, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_flex_align(gridRow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-  lv_obj_set_style_pad_row(gridRow, 6, 0);
+  lv_obj_set_style_pad_row(gridRow, 4, 0);
   lv_obj_set_style_pad_column(gridRow, 6, 0);
   g.pvCard = makeMetricCard(gridRow, cardW, cardH, LV_SYMBOL_CHARGE, "PV", &g.pvVal, uiColor565(t.pv));
   makeMetricCard(gridRow, cardW, cardH, LV_SYMBOL_HOME, "Load", &g.loadVal, uiColor565(t.text));
@@ -527,24 +529,24 @@ static void buildClassicHome(lv_obj_t* content, UiGlanceWidgets& g, lv_coord_t c
   g.tempLbl = uiMakeLabel(content, "Inv --  |  Batt --", uiFontBody(), uiColor565(t.muted));
   lv_obj_set_width(g.tempLbl, contentW);
   lv_obj_set_style_text_align(g.tempLbl, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_pad_top(g.tempLbl, 4, 0);
+  lv_obj_set_style_pad_top(g.tempLbl, 2, 0);
 }
 
 static uint8_t s_glanceBuiltLayout = 255;
 static bool s_glanceBuiltLandscape = false;
+static uint8_t s_glanceBuiltTheme = 255;
 
 bool uiGlanceNeedsBuild(const UiGlanceWidgets& g, uint8_t layoutId, bool landscape) {
-  return !g.gridPill || s_glanceBuiltLayout != layoutId || s_glanceBuiltLandscape != landscape;
+  return !g.gridPill || s_glanceBuiltLayout != layoutId || s_glanceBuiltLandscape != landscape ||
+         s_glanceBuiltTheme != themeId();
 }
 
 void uiGlanceDestroy(UiGlanceWidgets& g) {
-  if (g.gridPill) {
-    lv_obj_del(g.gridPill);
-    g.gridPill = nullptr;
-  }
+  // gridPill lives under the shell header; shell destroy already frees it.
   g = UiGlanceWidgets();
   s_glanceBuiltLayout = 255;
   s_glanceBuiltLandscape = false;
+  s_glanceBuiltTheme = 255;
 }
 
 void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, bool landscape) {
@@ -562,7 +564,7 @@ void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, 
   lv_obj_set_style_pad_row(content, 2, 0);
   const lv_coord_t contentW = lv_obj_get_width(shell.root) - 8;
   const lv_coord_t cardW = (contentW - 14) / 2;
-  const lv_coord_t cardH = 52;
+  const lv_coord_t cardH = 46;
 
   // GRID pill: landscape Classic puts it on the metrics column; portrait puts it
   // under the SOC hero. Never in the header (covers title/clock).
@@ -576,7 +578,7 @@ void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, 
   if (layoutId == 1) {
     // Compact: mid SOC + bar + 2x2 cards (fits ~189px content, no scroll)
     const lv_coord_t cH = 40;
-    g.socLbl = uiMakeLabel(content, "0%", &lv_font_soc_40, kSocWhite);
+    g.socLbl = uiMakeLabel(content, "0%", &lv_font_soc_40, socTextColor());
     applyAltSocFont(g.socLbl);
     lv_obj_set_width(g.socLbl, contentW - 8);
     lv_obj_set_style_text_align(g.socLbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -618,7 +620,7 @@ void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, 
     lv_obj_set_style_arc_width(g.arc, 9, LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(g.arc, uiColor565(t.card), LV_PART_MAIN);
     lv_obj_set_style_arc_color(g.arc, uiSocColor(50), LV_PART_INDICATOR);
-    g.socLbl = uiMakeLabel(g.arc, "0%", &lv_font_soc_40, kSocWhite);
+    g.socLbl = uiMakeLabel(g.arc, "0%", &lv_font_soc_40, socTextColor());
     applyAltSocFont(g.socLbl);
     lv_obj_center(g.socLbl);
 
@@ -637,7 +639,7 @@ void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, 
     g.gridCard = makeMiniMetric(metrics, mW, 46, "Grid", &g.gridVal, uiColor565(t.grid));
   } else if (layoutId == 3) {
     // Bars: SOC hero + labeled power meters
-    g.socLbl = uiMakeLabel(content, "0%", &lv_font_soc_40, kSocWhite);
+    g.socLbl = uiMakeLabel(content, "0%", &lv_font_soc_40, socTextColor());
     applyAltSocFont(g.socLbl);
     lv_obj_set_width(g.socLbl, contentW - 8);
     lv_obj_set_style_text_align(g.socLbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -677,8 +679,8 @@ void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, 
       lv_obj_set_style_radius(g.bars[i], 3, 0);
     }
   } else if (layoutId == 4) {
-    // Flow: energy snapshot — SOC hero, then PV / Home / Grid strip
-    g.socLbl = uiMakeLabel(content, "0%", &lv_font_soc_40, kSocWhite);
+    // Flow: energy snapshot â€” SOC hero, then PV / Home / Grid strip
+    g.socLbl = uiMakeLabel(content, "0%", &lv_font_soc_40, socTextColor());
     applyAltSocFont(g.socLbl);
     lv_obj_set_width(g.socLbl, contentW - 8);
     lv_obj_set_style_text_align(g.socLbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -721,6 +723,7 @@ void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, 
 
   s_glanceBuiltLayout = layoutId;
   s_glanceBuiltLandscape = landscape;
+  s_glanceBuiltTheme = themeId();
 
   g.staleOverlay = lv_obj_create(content);
   lv_obj_remove_style_all(g.staleOverlay);
@@ -728,7 +731,7 @@ void uiGlanceBuild(UiShellWidgets& shell, UiGlanceWidgets& g, uint8_t layoutId, 
   lv_obj_set_style_bg_color(g.staleOverlay, uiColor565(t.danger), 0);
   lv_obj_set_style_bg_opa(g.staleOverlay, LV_OPA_60, 0);
   lv_obj_set_style_radius(g.staleOverlay, 6, 0);
-  uiMakeLabel(g.staleOverlay, "No connection", uiFontBody(), lv_color_white());
+  uiMakeLabel(g.staleOverlay, "No connection", uiFontBody(), uiColor565(themeActive().onAccent));
   lv_obj_center(lv_obj_get_child(g.staleOverlay, 0));
   lv_obj_add_flag(g.staleOverlay, LV_OBJ_FLAG_HIDDEN);
 }
@@ -794,7 +797,7 @@ static void applyBatteryFill(UiGlanceWidgets& g, const GlanceData& data, uint32_
   if (charging || floating) fc = uiColor565(th.charge);
   else if (discharging) fc = uiColor565(th.grid);
 
-  // Keep fill height locked to real SOC — motion lives in the masked arrow.
+  // Keep fill height locked to real SOC â€” motion lives in the masked arrow.
   const lv_coord_t fillH = (lv_coord_t)max(6.0f, s_battInnerH * soc / 100.0f);
   lv_obj_set_height(g.battFill, fillH);
   lv_obj_set_style_bg_color(g.battFill, fc, 0);
@@ -865,7 +868,7 @@ void uiGlanceUpdate(UiGlanceWidgets& g, const GlanceData& data, bool stale, bool
       uiSetLabelText(g.socLbl, buf);
       if (layoutId != 0 || (layoutId == 0 && !g.socSubLbl)) {
         applyAltSocFont(g.socLbl, s_glanceBuiltLandscape);
-        lv_obj_set_style_text_color(g.socLbl, isnan(data.soc) ? uiColor565(themeActive().muted) : kSocWhite, 0);
+        lv_obj_set_style_text_color(g.socLbl, isnan(data.soc) ? uiColor565(themeActive().muted) : socTextColor(), 0);
       }
     }
   }
@@ -911,7 +914,7 @@ void uiGlanceUpdate(UiGlanceWidgets& g, const GlanceData& data, bool stale, bool
     uiSetLabelText(g.statusLbl, String("Inverter: ") + (data.status.length() ? data.status : "--"));
   }
   if (g.tempLbl) {
-    // One line in both orientations — two-line landscape was clipped under the battery stack.
+    // One line in both orientations â€” two-line landscape was clipped under the battery stack.
     uiSetLabelText(g.tempLbl, String("Inv ") + uiFmtTemp(data.inv_temp_c, 'C') + "  |  Batt " +
                                    uiFmtTemp(data.batt_temp_c, 'C'));
   }

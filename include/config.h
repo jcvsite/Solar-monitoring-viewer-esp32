@@ -74,7 +74,7 @@
 #endif
 
 // Bottom navigation bar (height only; Y position via layout.h navY())
-#define UI_NAV_H 27
+#define UI_NAV_H 36
 
 // Local time offset from UTC (seconds). Overridden by solar-monitoring host when available.
 #ifndef TIMEZONE_OFFSET_SEC

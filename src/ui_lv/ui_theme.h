@@ -14,10 +14,7 @@ const lv_font_t* uiFontSoc();
 extern lv_style_t uiStyleScreen;
 extern lv_style_t uiStyleCard;
 extern lv_style_t uiStyleHeader;
-extern lv_style_t uiStyleMuted;
 extern lv_style_t uiStyleNavBtn;
-extern lv_style_t uiStyleNavBtnActive;
-extern lv_style_t uiStyleAccent;
 
 lv_color_t uiSocColor(float soc);
 void uiThemeInitOnce();

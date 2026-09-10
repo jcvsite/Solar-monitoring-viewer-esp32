@@ -26,7 +26,17 @@ static void pinBackEvent(lv_event_t* e) {
 }
 
 void uiPinDestroy(UiPinWidgets& p) {
-  if (p.screen) lv_obj_del(p.screen);
+  if (!p.screen) return;
+  if (lv_scr_act() == p.screen) {
+    lv_obj_t* blank = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(blank, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(blank, LV_OPA_COVER, 0);
+    lv_scr_load(blank);
+    lv_obj_del(p.screen);
+    lv_obj_del(blank);
+  } else {
+    lv_obj_del(p.screen);
+  }
   p = UiPinWidgets();
 }
 
@@ -38,25 +48,28 @@ void uiPinBuild(UiPinWidgets& p, const char* title, const String& entry, const S
   lv_obj_remove_style_all(p.screen);
   lv_obj_add_style(p.screen, &uiStyleScreen, 0);
   lv_obj_set_size(p.screen, LV_HOR_RES, LV_VER_RES);
+  lv_obj_clear_flag(p.screen, LV_OBJ_FLAG_SCROLLABLE);
 
   uiMakeLabel(p.screen, title, uiFontTitle(), uiColor565(t.text));
-  lv_obj_align(lv_obj_get_child(p.screen, 0), LV_ALIGN_TOP_MID, 0, 8);
+  lv_obj_align(lv_obj_get_child(p.screen, 0), LV_ALIGN_TOP_MID, 0, 6);
   uiMakeLabel(p.screen, subtitle.c_str(), uiFontBody(), uiColor565(t.muted));
-  lv_obj_align(lv_obj_get_child(p.screen, 1), LV_ALIGN_TOP_MID, 0, 28);
+  lv_obj_align(lv_obj_get_child(p.screen, 1), LV_ALIGN_TOP_MID, 0, 26);
 
   p.entryLbl = uiMakeLabel(p.screen, entry.c_str(), uiFontDisplay(), uiColor565(t.text));
-  lv_obj_align(p.entryLbl, LV_ALIGN_TOP_MID, 0, 52);
+  lv_obj_align(p.entryLbl, LV_ALIGN_TOP_MID, 0, 46);
 
   lv_obj_t* pad = lv_btnmatrix_create(p.screen);
   lv_btnmatrix_set_map(pad, kPinMap);
-  lv_obj_set_size(pad, LV_PCT(90), 140);
-  lv_obj_align(pad, LV_ALIGN_CENTER, 0, 20);
+  const lv_coord_t padH = (LV_VER_RES > 280) ? 140 : 120;
+  lv_obj_set_size(pad, LV_PCT(90), padH);
+  lv_obj_align(pad, LV_ALIGN_TOP_MID, 0, 72);
   lv_obj_add_event_cb(pad, pinBtnEvent, LV_EVENT_VALUE_CHANGED, NULL);
 
   p.statusLbl = uiMakeLabel(p.screen, status.c_str(), uiFontBody(), uiColor565(t.warn));
-  lv_obj_align(p.statusLbl, LV_ALIGN_BOTTOM_MID, 0, -36);
+  lv_obj_align(p.statusLbl, LV_ALIGN_BOTTOM_MID, 0, -40);
 
   lv_obj_t* back = lv_btn_create(p.screen);
+  lv_obj_set_size(back, 80, 32);
   lv_obj_add_event_cb(back, pinBackEvent, LV_EVENT_CLICKED, NULL);
   uiMakeLabel(back, "Back", uiFontBody(), uiColor565(t.text));
   lv_obj_align(back, LV_ALIGN_BOTTOM_MID, 0, -6);

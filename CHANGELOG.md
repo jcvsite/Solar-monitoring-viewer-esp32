@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-11
+
+### Added
+- **Night mode**: schedule start/end hour and night brightness from Settings (and device web UI).
+- On-device **Theme** and **Layout** pickers with Back navigation.
+- HostChoice **Skip for now**; WiFi password keyboard with discoverable ABC/abc/1# modes.
+
+### Changed
+- Firmware version **0.3.3** (platformio.ini, webflash manifest).
+- Host config sync applies visual prefs (theme/layout/rotation/brightness) only when `config_rev` increases.
+- Taller nav/settings touch targets (36px); Classic Glance cards shortened so Inv/Batt temps clear the nav.
+- Lean-up: remove unused Montserrat 60 font / dead logo TU; shared layout/theme/rotation name helpers.
+
+### Fixed
+- Theme/layout Settings rows corrupted NVS (`index = -1`) and never opened the picker; theme changes now rebuild Glance/shell so Home repaints.
+- LVGL active-screen delete crashes on setup/PIN screens; Glance `gridPill` double-free after shell teardown.
+- Settings tab taps interrupted by glance redraw; swipe exclusion over the tab bar.
+- WiFi boot stuck on splash / SoftAP without UI tick; reconnect backoff after drops.
+- Landscape History/BMS clipping; PIN pad overlapping Back; label truncation on SSID/host/metrics.
+
 ## [0.3.2] - 2026-09-07
 
 ### Added

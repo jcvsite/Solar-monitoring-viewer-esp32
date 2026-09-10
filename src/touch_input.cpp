@@ -134,22 +134,10 @@ static bool readPoint(TouchSample& out) {
   return false;
 }
 
-bool touchInputSample(TouchSample& out) {
-  out = TouchSample();
-  return readPoint(out);
-}
-
 bool touchInputRead(int16_t& x, int16_t& y) {
   TouchSample s;
   if (!readPoint(s)) return false;
   x = s.x;
   y = s.y;
   return true;
-}
-
-void touchInputShowTap(TFT_eSPI& tft, int16_t x, int16_t y) {
-  tft.drawCircle(x, y, 10, TFT_YELLOW);
-  tft.drawLine(x - 14, y, x + 14, y, TFT_YELLOW);
-  tft.drawLine(x, y - 14, x, y + 14, TFT_YELLOW);
-  tft.fillCircle(x, y, 3, TFT_WHITE);
 }

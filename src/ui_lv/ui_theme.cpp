@@ -5,10 +5,7 @@
 lv_style_t uiStyleScreen;
 lv_style_t uiStyleCard;
 lv_style_t uiStyleHeader;
-lv_style_t uiStyleMuted;
 lv_style_t uiStyleNavBtn;
-lv_style_t uiStyleNavBtnActive;
-lv_style_t uiStyleAccent;
 
 static const lv_font_t* s_fontBody = &lv_font_montserrat_16;
 static const lv_font_t* s_fontTitle = &lv_font_montserrat_16;
@@ -27,9 +24,7 @@ const lv_font_t* uiFontTitle() { return s_fontTitle; }
 const lv_font_t* uiFontDisplay() { return s_fontDisplay; }
 const lv_font_t* uiFontSoc() { return s_fontSoc; }
 
-static void initStyle(lv_style_t* st) {
-  lv_style_init(st);
-}
+static void initStyle(lv_style_t* st) { lv_style_init(st); }
 
 void uiThemeRefreshStyles() {
   const ThemePalette& t = themeActive();
@@ -58,26 +53,11 @@ void uiThemeRefreshStyles() {
   lv_style_set_pad_hor(&uiStyleHeader, 6);
   lv_style_set_pad_ver(&uiStyleHeader, 4);
 
-  lv_style_set_text_color(&uiStyleMuted, uiColor565(t.muted));
-  lv_style_set_text_font(&uiStyleMuted, s_fontBody);
-
   lv_style_set_bg_color(&uiStyleNavBtn, uiColor565(t.card));
   lv_style_set_text_color(&uiStyleNavBtn, uiColor565(t.dim));
   lv_style_set_border_width(&uiStyleNavBtn, 0);
   lv_style_set_radius(&uiStyleNavBtn, 6);
   lv_style_set_pad_all(&uiStyleNavBtn, 4);
-
-  lv_style_set_bg_color(&uiStyleNavBtnActive, uiColor565(t.panel));
-  lv_style_set_text_color(&uiStyleNavBtnActive, uiColor565(t.text));
-  lv_style_set_border_width(&uiStyleNavBtnActive, 0);
-  lv_style_set_radius(&uiStyleNavBtnActive, 6);
-  lv_style_set_pad_all(&uiStyleNavBtnActive, 4);
-
-  lv_style_set_bg_color(&uiStyleAccent, uiColor565(t.pv));
-  lv_style_set_text_color(&uiStyleAccent, uiColor565(t.onAccent));
-  lv_style_set_radius(&uiStyleAccent, 8);
-  lv_style_set_pad_hor(&uiStyleAccent, 10);
-  lv_style_set_pad_ver(&uiStyleAccent, 6);
 }
 
 void uiThemeApply(uint8_t themeId) {
@@ -100,8 +80,5 @@ void uiThemeInitOnce() {
   initStyle(&uiStyleScreen);
   initStyle(&uiStyleCard);
   initStyle(&uiStyleHeader);
-  initStyle(&uiStyleMuted);
   initStyle(&uiStyleNavBtn);
-  initStyle(&uiStyleNavBtnActive);
-  initStyle(&uiStyleAccent);
 }

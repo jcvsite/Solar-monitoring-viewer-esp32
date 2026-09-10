@@ -15,6 +15,10 @@ struct HostSettings {
   bool gridOfflineAlert = true;
   bool checkForUpdate = false;
   bool autoInstallUpdate = false;
+  bool nightMode = false;
+  uint8_t nightBrightness = 40;
+  uint16_t nightStartMin = 22 * 60;  // minutes from midnight
+  uint16_t nightEndMin = 6 * 60;
   uint32_t configRev = 0;
   String settingsPin;  // "" = off, else 4 digits
 };

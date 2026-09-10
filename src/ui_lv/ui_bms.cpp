@@ -43,6 +43,8 @@ static lv_obj_t* makeMetricChip(lv_obj_t* parent, lv_coord_t w, lv_coord_t h, co
   return card;
 }
 
+bool uiBmsNeedsBuild(const UiBmsWidgets& b) { return !b.heroCard; }
+
 void uiBmsBuild(UiShellWidgets& shell, UiBmsWidgets& b) {
   uiShellClearContent(shell);
   b = UiBmsWidgets();
@@ -120,7 +122,7 @@ void uiBmsBuild(UiShellWidgets& shell, UiBmsWidgets& b) {
   lv_obj_set_style_pad_all(b.cellCard, 3, 0);
   lv_obj_set_height(b.cellCard, 0);
   lv_obj_set_flex_grow(b.cellCard, 1);
-  lv_obj_set_style_min_height(b.cellCard, 48, 0);
+  lv_obj_set_style_min_height(b.cellCard, 32, 0);
   lv_obj_clear_flag(b.cellCard, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(b.cellCard, LV_FLEX_FLOW_COLUMN);
 

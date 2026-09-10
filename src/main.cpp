@@ -6,6 +6,8 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <SPI.h>
+#include <esp_wifi.h>
+#include <stdio.h>
 
 #include "config.h"
 #include "secrets.h"
@@ -52,17 +54,14 @@ String otaStatus = "Ready";
 bool needRedraw = true;
 static bool s_pollAfterUi = false;
 std::vector<DiscoveredHost> found;
-int foundIndex = 0;
 uint8_t manualOctets[4] = {192, 168, 1, 240};
 uint8_t manualSel = 0;
 
 std::vector<WifiNetwork> wifiNets;
-int wifiScroll = 0;
 int wifiSelected = 0;
 String wifiPickSsid;
 String wifiPassword;
 bool wifiShowPass = false;
-bool wifiShift = false;
 String wifiStatus;
 
 bool settingsPinUnlocked = false;
@@ -72,14 +71,10 @@ String pinSetFirst;
 uint8_t pinSetPhase = 0;
 UiPage pinReturnPage = UiPage::Glance;
 
-static const char* kLayoutNames[] = {"Classic", "Compact", "Ring", "Bars", "Flow"};
-static const char* kThemeNames[] = {"Dark", "Light", "Solar", "Ocean", "Forest"};
-
 static void pollIfDue(bool force);
 static void pollDisplayConfig(bool force);
 static bool glanceGridAlert(const GlanceData& g);
 
-static const char* rotationLabel(uint8_t r);
 static void refreshCurrentPage();
 static void handleUiAction(UiActionId id, const UiActionCtx& ctx);
 static void openSettingsPage();
@@ -90,22 +85,12 @@ static void openManualHost();
 static void startWifiScan();
 static bool ensureWifi(bool forcePortal);
 static bool connectPickedWifi(const String& ssid, const String& pass);
+static void flushUi();
 static void showHostChoice();
 static String manualOctetsToIp();
 static void handlePinPadCommon(bool forSet);
-
-static const char* rotationLabel(uint8_t r) {
-  switch (r & 3) {
-    case 1:
-      return "Landscape";
-    case 2:
-      return "Portrait flip";
-    case 3:
-      return "Landscape flip";
-    default:
-      return "Portrait";
-  }
-}
+static void applyEffectiveBrightness();
+static uint8_t cycleBrightnessStep(uint8_t cur, const uint8_t* steps, size_t n);
 
 static void refreshCurrentPage() {
   const bool stale = (lastGood == 0) || (millis() - lastGood > STALE_MS);
@@ -127,10 +112,10 @@ static void refreshCurrentPage() {
                         FW_VERSION);
       break;
     case UiPage::PickLayout:
-      ui.showPickList("Layout", kLayoutNames, 5, settings.glanceLayout, false);
+      ui.showPickList("Layout", layoutNames(), 5, settings.glanceLayout, false);
       break;
     case UiPage::PickTheme:
-      ui.showPickList("Theme", kThemeNames, 5, settings.themeId, true);
+      ui.showPickList("Theme", themeNames(), themeCount(), settings.themeId, true);
       break;
     case UiPage::FindingHost:
       ui.showFindingHost(statusMsg);
@@ -171,16 +156,70 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
     case UiActionId::OpenSettings:
       openSettingsPage();
       break;
-    case UiActionId::PickLayout:
-      settings.glanceLayout = (uint8_t)ctx.index;
+    case UiActionId::SettingsTab:
+      settingsTab = ctx.settingsTab;
+      // LVGL already switched the tab — no full rebuild.
+      break;
+    case UiActionId::CycleBrightness: {
+      static const uint8_t kDayBri[] = {80, 140, 200, 255};
+      settings.brightness = cycleBrightnessStep(settings.brightness, kDayBri, sizeof(kDayBri) / sizeof(kDayBri[0]));
       store.save(settings);
+      applyEffectiveBrightness();
+      needRedraw = true;
+      break;
+    }
+    case UiActionId::ToggleNightMode:
+      settings.nightMode = !settings.nightMode;
+      store.save(settings);
+      applyEffectiveBrightness();
+      needRedraw = true;
+      break;
+    case UiActionId::CycleNightBrightness: {
+      static const uint8_t kNightBri[] = {10, 25, 40, 80};
+      settings.nightBrightness = cycleBrightnessStep(settings.nightBrightness, kNightBri, sizeof(kNightBri) / sizeof(kNightBri[0]));
+      store.save(settings);
+      applyEffectiveBrightness();
+      needRedraw = true;
+      break;
+    }
+    case UiActionId::CycleNightStart: {
+      uint8_t h = (uint8_t)((settings.nightStartMin / 60 + 1) % 24);
+      settings.nightStartMin = (uint16_t)(h * 60);
+      store.save(settings);
+      applyEffectiveBrightness();
+      needRedraw = true;
+      break;
+    }
+    case UiActionId::CycleNightEnd: {
+      uint8_t h = (uint8_t)((settings.nightEndMin / 60 + 1) % 24);
+      settings.nightEndMin = (uint16_t)(h * 60);
+      store.save(settings);
+      applyEffectiveBrightness();
+      needRedraw = true;
+      break;
+    }
+    case UiActionId::OpenPickLayout:
+      page = UiPage::PickLayout;
+      needRedraw = true;
+      break;
+    case UiActionId::OpenPickTheme:
+      page = UiPage::PickTheme;
+      needRedraw = true;
+      break;
+    case UiActionId::PickLayout:
+      if (ctx.index >= 0 && ctx.index <= 4) {
+        settings.glanceLayout = (uint8_t)ctx.index;
+        store.save(settings);
+      }
       page = UiPage::Settings;
       needRedraw = true;
       break;
     case UiActionId::PickTheme:
-      settings.themeId = (uint8_t)ctx.index;
-      ui.setTheme(settings.themeId);
-      store.save(settings);
+      if (ctx.index >= 0 && ctx.index <= 4) {
+        settings.themeId = (uint8_t)ctx.index;
+        ui.setTheme(settings.themeId);
+        store.save(settings);
+      }
       page = UiPage::Settings;
       needRedraw = true;
       break;
@@ -259,6 +298,11 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
       needRedraw = true;
       break;
     }
+    case UiActionId::WifiToggleShowPass:
+      wifiPassword = ui.getWifiPasswordInput();
+      wifiShowPass = !wifiShowPass;
+      needRedraw = true;
+      break;
     case UiActionId::WifiBack:
       if (page == UiPage::WifiPassword) {
         page = UiPage::WifiPick;
@@ -274,6 +318,10 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
       break;
     case UiActionId::HostChoiceManual:
       openManualHost();
+      break;
+    case UiActionId::HostChoiceSkip:
+      page = UiPage::Glance;
+      needRedraw = true;
       break;
     case UiActionId::FindingHostCancel:
       showHostChoice();
@@ -302,6 +350,8 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
       const String ip = manualOctetsToIp();
       statusMsg = "Testing...";
       needRedraw = true;
+      refreshCurrentPage();
+      flushUi();
       String title;
       if (api.probeHost(ip, settings.hostPort, settings.token, title)) {
         statusMsg = title.length() ? title : "Host OK";
@@ -353,6 +403,10 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
       needRedraw = true;
       break;
     case UiActionId::OtaCheckNow: {
+      otaStatus = "Checking...";
+      needRedraw = true;
+      refreshCurrentPage();
+      flushUi();
       String st;
       gitOta.installLatest(st, false);
       otaStatus = st;
@@ -376,7 +430,10 @@ static void handleUiAction(UiActionId id, const UiActionCtx& ctx) {
       break;
     case UiActionId::PinBack:
       pinEntry = "";
-      page = (page == UiPage::PinSet) ? UiPage::Settings : UiPage::Glance;
+      if (page == UiPage::PinSet || page == UiPage::PickLayout || page == UiPage::PickTheme)
+        page = UiPage::Settings;
+      else
+        page = UiPage::Glance;
       needRedraw = true;
       break;
     default:
@@ -388,21 +445,27 @@ static void startWifiScan() {
   wifiStatus = "Scanning...";
   needRedraw = true;
   ui.showWifiNetworks(wifiNets, wifiSelected, wifiStatus);
+  flushUi();
   if (wifiScanNetworks(wifiNets)) {
-    wifiScroll = 0;
     wifiSelected = 0;
     wifiStatus = "Tap your network";
   } else {
     wifiNets.clear();
     wifiStatus = "No networks — tap Rescan";
   }
-  needRedraw = true;
+  ui.showWifiNetworks(wifiNets, wifiSelected, wifiStatus);
+  flushUi();
+  needRedraw = false;
 }
 
 static bool connectPickedWifi(const String& ssid, const String& pass) {
   wifiStatus = "Connecting...";
   needRedraw = true;
-  ui.setSplashMsg(wifiStatus.c_str());
+  if (page == UiPage::WifiPassword) {
+    ui.showWifiPassword(ssid, pass, wifiShowPass, wifiStatus);
+  } else {
+    ui.showWifiNetworks(wifiNets, wifiSelected, wifiStatus);
+  }
   ui.tick();
   if (!wifiConnectAndSave(ssid.c_str(), pass.c_str())) {
     wifiStatus = "Failed — check password";
@@ -491,7 +554,6 @@ static void startHostDiscovery() {
 
 static void finishHostDiscovery() {
   if (!found.empty()) {
-    foundIndex = 0;
     settings.hostIp = found[0].ip;
     settings.hostPort = found[0].port;
     store.save(settings);
@@ -521,15 +583,62 @@ static String uniqueHostname() {
   return String(buf);
 }
 
+static bool s_briPwmReady = false;
+
 static void setBrightness(uint8_t v) {
+  if (!s_briPwmReady) {
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcAttach(TFT_BL, 5000, 8);
+    ledcAttach(TFT_BL, 5000, 8);
+#else
+    ledcSetup(0, 5000, 8);
+    ledcAttachPin(TFT_BL, 0);
+#endif
+    s_briPwmReady = true;
+  }
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
   ledcWrite(TFT_BL, v);
 #else
-  ledcSetup(0, 5000, 8);
-  ledcAttachPin(TFT_BL, 0);
   ledcWrite(0, v);
 #endif
+}
+
+static bool minuteInNightWindow(uint16_t nowMin, uint16_t startMin, uint16_t endMin) {
+  if (startMin == endMin) return false;
+  if (startMin < endMin) return nowMin >= startMin && nowMin < endMin;
+  return nowMin >= startMin || nowMin < endMin;
+}
+
+static uint8_t effectiveBrightness() {
+  if (!settings.nightMode) return settings.brightness;
+  struct tm ti;
+  if (!getLocalTime(&ti, 0)) return settings.brightness;
+  const uint16_t nowMin = (uint16_t)(ti.tm_hour * 60 + ti.tm_min);
+  if (minuteInNightWindow(nowMin, settings.nightStartMin, settings.nightEndMin)) {
+    return settings.nightBrightness;
+  }
+  return settings.brightness;
+}
+
+static void applyEffectiveBrightness() { setBrightness(effectiveBrightness()); }
+
+static uint8_t cycleBrightnessStep(uint8_t cur, const uint8_t* steps, size_t n) {
+  size_t i = 0;
+  for (; i < n; i++) {
+    if (cur == steps[i]) {
+      return steps[(i + 1) % n];
+    }
+  }
+  // Snap to nearest then advance
+  size_t best = 0;
+  int bestDiff = 256;
+  for (size_t j = 0; j < n; j++) {
+    const int d = abs((int)cur - (int)steps[j]);
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = j;
+    }
+  }
+  return steps[(best + 1) % n];
 }
 
 static void applyScreenRotation() {
@@ -541,24 +650,23 @@ static void applyScreenRotation() {
 
 static String gPortalApName;
 
+static void flushUi() {
+  for (int i = 0; i < 4; i++) {
+    ui.tick();
+    delay(5);
+  }
+}
+
 static void configModeCallback(WiFiManager* wm) {
   (void)wm;
   ui.showWifiPortal(gPortalApName.c_str());
+  flushUi();
 }
 
-static bool ensureWifi(bool forcePortal) {
-  WiFi.mode(WIFI_STA);
-  gPortalApName = uniqueApName();
-  String hostname = uniqueHostname();
-
-  String seedSsid = WIFI_SSID;
-  String seedPass = WIFI_PASSWORD;
-  bool seedOk = seedSsid.length() > 0 && seedSsid != "YourWiFiSSID";
-
-  WiFiManager wm;
+static void configureWifiManager(WiFiManager& wm, const String& hostname) {
   wm.setDebugOutput(false);
   wm.setConfigPortalTimeout(300);
-  wm.setConnectTimeout(30);
+  wm.setConnectTimeout(20);
   wm.setAPCallback(configModeCallback);
   wm.setTitle("Solar Display WiFi");
   wm.setHostname(hostname.c_str());
@@ -573,35 +681,76 @@ static bool ensureWifi(bool forcePortal) {
       "h1{font-size:1.35rem} label{font-weight:600;display:block;margin-top:10px}"
       ".msg{padding:10px;border-radius:8px;background:#1c1c1e;margin:10px 0}"
       "</style>");
+}
+
+static bool waitStaConnected(uint32_t timeoutMs) {
+  uint32_t t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < timeoutMs) {
+    lvglPortTick();
+    delay(20);
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
+static bool runPhoneConfigPortal() {
+  String hostname = uniqueHostname();
+  WiFiManager wm;
+  configureWifiManager(wm, hostname);
+  wm.setConfigPortalBlocking(false);
+
+  ui.showWifiPortal(gPortalApName.c_str());
+  flushUi();
+
+  if (!wm.startConfigPortal(gPortalApName.c_str())) {
+    return WiFi.status() == WL_CONNECTED;
+  }
+
+  uint32_t t0 = millis();
+  while (wm.getConfigPortalActive() && millis() - t0 < 300000UL) {
+    wm.process();
+    ui.tick();
+    if (WiFi.status() == WL_CONNECTED) break;
+    delay(5);
+  }
+  wm.stopConfigPortal();
+  return WiFi.status() == WL_CONNECTED;
+}
+
+static bool ensureWifi(bool forcePortal) {
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  gPortalApName = uniqueApName();
+  String hostname = uniqueHostname();
+  WiFi.setHostname(hostname.c_str());
 
   if (forcePortal) {
-    ui.showWifiPortal(gPortalApName.c_str());
-    bool ok = wm.startConfigPortal(gPortalApName.c_str());
-    return ok && WiFi.status() == WL_CONNECTED;
+    return runPhoneConfigPortal();
   }
 
+  // Boot: brief STA retry only. SoftAP is Phone fallback — fail fast so the
+  // on-device WiFi list can open (README Option A).
   ui.setSplashMsg("WiFi...");
-  ui.tick();
-  bool ok = false;
+  flushUi();
+
+  String seedSsid = WIFI_SSID;
+  String seedPass = WIFI_PASSWORD;
+  const bool seedOk = seedSsid.length() > 0 && seedSsid != "YourWiFiSSID";
+
   if (seedOk) {
-    ok = wm.autoConnect(gPortalApName.c_str(), NULL);
-    if (!ok) {
-      WiFi.begin(seedSsid.c_str(), seedPass.c_str());
-      uint32_t t0 = millis();
-      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 12000) {
-        lvglPortTick();
-        delay(20);
-      }
-      ok = WiFi.status() == WL_CONNECTED;
-      if (!ok) {
-        ui.showWifiPortal(gPortalApName.c_str());
-        ok = wm.startConfigPortal(gPortalApName.c_str());
-      }
-    }
-  } else {
-    ok = wm.autoConnect(gPortalApName.c_str());
+    WiFi.begin(seedSsid.c_str(), seedPass.c_str());
+    if (waitStaConnected(8000)) return true;
+    return false;
   }
-  return ok && WiFi.status() == WL_CONNECTED;
+
+  wifi_config_t cfg = {};
+  const bool hasSaved =
+      esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK && cfg.sta.ssid[0] != 0;
+  if (hasSaved) {
+    WiFi.begin();
+    if (waitStaConnected(8000)) return true;
+  }
+
+  return false;
 }
 
 static bool pinIsSet() { return settings.settingsPin.length() == 4; }
@@ -679,33 +828,36 @@ static void handlePinPadCommon(bool forSet) {
 
 static void applyHostSettingsFromConfig(const DisplayConfig& cfg) {
   bool changed = false;
-  if (cfg.config_rev > settings.configRev) {
+  const bool revBump = cfg.config_rev > settings.configRev;
+  if (revBump) {
     settings.configRev = cfg.config_rev;
     changed = true;
   }
-  if (settings.glanceLayout != cfg.glance_layout) {
-    settings.glanceLayout = cfg.glance_layout;
-    changed = true;
-  }
-  if (settings.themeId != cfg.theme) {
-    settings.themeId = cfg.theme;
-    ui.setTheme(settings.themeId);
-    changed = true;
-  }
-  if (settings.screenRotation != cfg.rotation) {
-    // Don't yank orientation right after a local rotate (stops portrait/landscape fight).
-    if (s_lastLocalRotateMs != 0 && millis() - s_lastLocalRotateMs < 120000) {
-      // keep local
-    } else {
-      settings.screenRotation = cfg.rotation;
-      applyScreenRotation();
+  // Visual prefs only follow the host when it bumps config_rev.
+  if (revBump) {
+    if (settings.glanceLayout != cfg.glance_layout) {
+      settings.glanceLayout = cfg.glance_layout;
       changed = true;
     }
-  }
-  if (settings.brightness != cfg.brightness) {
-    settings.brightness = cfg.brightness;
-    setBrightness(settings.brightness);
-    changed = true;
+    if (settings.themeId != cfg.theme) {
+      settings.themeId = cfg.theme;
+      ui.setTheme(settings.themeId);
+      changed = true;
+    }
+    if (settings.screenRotation != cfg.rotation) {
+      if (s_lastLocalRotateMs != 0 && millis() - s_lastLocalRotateMs < 120000) {
+        // keep local
+      } else {
+        settings.screenRotation = cfg.rotation;
+        applyScreenRotation();
+        changed = true;
+      }
+    }
+    if (settings.brightness != cfg.brightness) {
+      settings.brightness = cfg.brightness;
+      applyEffectiveBrightness();
+      changed = true;
+    }
   }
   if (settings.pollMs != cfg.poll_ms) {
     settings.pollMs = cfg.poll_ms;
@@ -765,7 +917,8 @@ static void applyHostPollResults() {
                          (g.weather_code != glance.weather_code) || (g.weather_temp != glance.weather_temp);
     if (!glanceVisualEqual(glance, g)) {
       glance = g;
-      needRedraw = true;
+      // Don't rebuild Settings/other pages on every power tick — kills tab taps.
+      if (page == UiPage::Glance) needRedraw = true;
     } else {
       glance = g;
       if (page == UiPage::Glance && headerChanged) ui.refreshHeaderTime(glance);
@@ -809,7 +962,7 @@ void setup() {
   settings.screenRotation = (uint8_t)constrain(settings.screenRotation, (int)0, (int)3);
   tft.setRotation(settings.screenRotation);
   touchInputSetRotation(settings.screenRotation);
-  setBrightness(settings.brightness);
+  applyEffectiveBrightness();
   ui.begin(tft, settings.screenRotation);
   ui.setTheme(settings.themeId);
   uiActionsSetHandler(handleUiAction);
@@ -856,6 +1009,21 @@ void setup() {
 void loop() {
   ui.tick();
 
+  // Settings tab bar sits under the 24px header — don't treat horizontal drags there as page swipes.
+  lvglPortSetSwipeExcludeTop(page == UiPage::Settings ? 64 : 0);
+
+  static uint32_t s_wifiDownSince = 0;
+  static uint32_t s_lastWifiReconnect = 0;
+  if (WiFi.status() == WL_CONNECTED) {
+    s_wifiDownSince = 0;
+  } else if (page != UiPage::WifiPick && page != UiPage::WifiPassword) {
+    if (s_wifiDownSince == 0) s_wifiDownSince = millis();
+    if (millis() - s_wifiDownSince > 30000 && millis() - s_lastWifiReconnect > 15000) {
+      s_lastWifiReconnect = millis();
+      WiFi.reconnect();
+    }
+  }
+
   const int swipe = lvglPortConsumeSwipe();
   if (swipe != 0) {
     uiShellSwipePage(swipe);
@@ -871,7 +1039,7 @@ void loop() {
       applyScreenRotation();
     }
     ui.setTheme(settings.themeId);
-    setBrightness(settings.brightness);
+    applyEffectiveBrightness();
     needRedraw = true;
   }
 
@@ -900,6 +1068,22 @@ void loop() {
     lastClock = millis();
     ui.ensureClock();
     ui.refreshHeaderTime(glance);
+  }
+
+  static uint32_t lastBriApply = 0;
+  static int lastBriMin = -1;
+  if (millis() - lastBriApply >= 15000) {
+    lastBriApply = millis();
+    struct tm ti;
+    if (getLocalTime(&ti, 0)) {
+      const int nowMin = ti.tm_hour * 60 + ti.tm_min;
+      if (nowMin != lastBriMin) {
+        lastBriMin = nowMin;
+        applyEffectiveBrightness();
+      }
+    } else {
+      applyEffectiveBrightness();
+    }
   }
 
   if (page == UiPage::Glance && glanceGridAlert(glance) && millis() - lastAnim >= 5000) {

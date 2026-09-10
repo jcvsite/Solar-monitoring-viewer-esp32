@@ -9,7 +9,7 @@ Local wall/desk display for **[solar-monitoring](https://github.com/jcvsite/sola
 </p>
 
 <p align="center">
-  <em>Cheap Yellow Display (CYD, 240x320) - Classic Glance on device, portrait and landscape (firmware v0.3.2)</em>
+  <em>Cheap Yellow Display (CYD, 240x320) - Classic Glance on device, portrait and landscape (firmware v0.3.3)</em>
 </p>
 
 | | |
@@ -118,11 +118,11 @@ Use the built-in touch UI - no phone required.
 2. Wait for **Scanning…** to finish (a few seconds).  
 3. **Tap your home network** in the list (signal strength and lock icon shown).  
 4. Type the password with the on-screen keyboard:  
-   - **ABC / abc** toggles upper/lower case  
+   - **ABC** switches to uppercase (keys show A–Z); **abc** switches back to lowercase  
+   - **1#** opens symbols / numbers  
    - **Show / Hide** reveals the password  
-   - **Del** removes the last character  
-   - **space** and symbols `. - _ @` are available  
-5. Tap **Connect**. On success the display joins your LAN and continues to host discovery.  
+   - **space** inserts a space; checkmark connects  
+5. Tap the checkmark (or Connect). On success the display joins your LAN and continues to host discovery.  
 
 To change WiFi later: **Settings → WiFi Setup**.
 
@@ -166,7 +166,9 @@ Touch the bottom tabs:
 | **Glance** | Title, **weather + temperature**, **clock in host `LOCAL_TIMEZONE`**, centered battery icon + large **SOC**, animated fill when charging/discharging, PV / Load / Grid with icons, today kWh. **Red “NO GRID” blink** every 5 s when grid is offline |
 | **BMS** | Pack stats, temps, cell delta; color-coded cell voltage bars with min/max markers and centered voltage labels |
 | **Hist** | PV & load sparkline (compact chart) + today’s energy totals with color icons |
-| **Set** | Scrollable panels - host IP, **FIND** (discover), **Manual**, **WiFi Setup**, firmware OTA, settings PIN. Color icons on rows and tabs |
+| **Set** | Scrollable panels - host IP, **FIND** (discover), **Manual**, **WiFi Setup**, brightness / **Night mode** (quiet hours + night brightness), firmware OTA, settings PIN. Color icons on rows and tabs |
+
+Night mode (Conn tab): enable **Night mode**, then set **Night bri**, **Night start**, and **Night end** (hour steps). Outside that window the display uses the normal **Brightness** setting. Schedule is stored on the device (not overwritten by host sync).
 
 ```text
 ESP32 display  --HTTP GET /api/display-->  solar-monitoring :8081

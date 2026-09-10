@@ -23,8 +23,19 @@ static void octetSelect(lv_event_t* e) {
   uiActionsFire(UiActionId::ManualOctetSelect, ctx);
 }
 
+/** Never delete the active screen first — leaves disp->act_scr dangling. */
 static void clearScreen() {
-  if (s_screen) lv_obj_del(s_screen);
+  if (!s_screen) return;
+  if (lv_scr_act() == s_screen) {
+    lv_obj_t* blank = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(blank, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(blank, LV_OPA_COVER, 0);
+    lv_scr_load(blank);
+    lv_obj_del(s_screen);
+    lv_obj_del(blank);
+  } else {
+    lv_obj_del(s_screen);
+  }
   s_screen = nullptr;
 }
 
@@ -34,6 +45,7 @@ void uiSetupHostChoice(const String& wifiSsid) {
   s_screen = lv_obj_create(NULL);
   lv_obj_add_style(s_screen, &uiStyleScreen, 0);
   lv_obj_set_size(s_screen, LV_HOR_RES, LV_VER_RES);
+  lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
   uiMakeLabel(s_screen, "Find solar-monitoring host", uiFontTitle(), uiColor565(t.text));
   lv_obj_align(lv_obj_get_child(s_screen, 0), LV_ALIGN_TOP_MID, 0, 20);
   uiMakeLabel(s_screen, ("WiFi: " + wifiSsid).c_str(), uiFontBody(), uiColor565(t.muted));
@@ -41,15 +53,21 @@ void uiSetupHostChoice(const String& wifiSsid) {
 
   lv_obj_t* b1 = lv_btn_create(s_screen);
   lv_obj_set_size(b1, LV_PCT(90), 40);
-  lv_obj_align(b1, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_align(b1, LV_ALIGN_CENTER, 0, -30);
   lv_obj_add_event_cb(b1, setupAction, LV_EVENT_CLICKED, (void*)(intptr_t)UiActionId::HostChoiceDiscover);
   uiMakeLabel(b1, "Auto discover", uiFontBody(), uiColor565(t.text));
 
   lv_obj_t* b2 = lv_btn_create(s_screen);
   lv_obj_set_size(b2, LV_PCT(90), 40);
-  lv_obj_align(b2, LV_ALIGN_CENTER, 0, 30);
+  lv_obj_align(b2, LV_ALIGN_CENTER, 0, 20);
   lv_obj_add_event_cb(b2, setupAction, LV_EVENT_CLICKED, (void*)(intptr_t)UiActionId::HostChoiceManual);
   uiMakeLabel(b2, "Enter IP manually", uiFontBody(), uiColor565(t.text));
+
+  lv_obj_t* b3 = lv_btn_create(s_screen);
+  lv_obj_set_size(b3, LV_PCT(90), 36);
+  lv_obj_align(b3, LV_ALIGN_BOTTOM_MID, 0, -16);
+  lv_obj_add_event_cb(b3, setupAction, LV_EVENT_CLICKED, (void*)(intptr_t)UiActionId::HostChoiceSkip);
+  uiMakeLabel(b3, "Skip for now", uiFontBody(), uiColor565(t.muted));
   lv_scr_load(s_screen);
 }
 
@@ -59,6 +77,7 @@ void uiSetupFindingHost(const String& status) {
   s_screen = lv_obj_create(NULL);
   lv_obj_add_style(s_screen, &uiStyleScreen, 0);
   lv_obj_set_size(s_screen, LV_HOR_RES, LV_VER_RES);
+  lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
   uiMakeLabel(s_screen, "Searching LAN...", uiFontTitle(), uiColor565(t.text));
   lv_obj_align(lv_obj_get_child(s_screen, 0), LV_ALIGN_CENTER, 0, -20);
   uiMakeLabel(s_screen, status.c_str(), uiFontBody(), uiColor565(t.muted));
@@ -78,6 +97,7 @@ void uiSetupManualHost(const uint8_t octets[4], uint8_t selectedOctet, uint16_t 
   lv_obj_set_size(s_screen, LV_HOR_RES, LV_VER_RES);
   lv_obj_set_flex_flow(s_screen, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_all(s_screen, 8, 0);
+  lv_obj_add_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
 
   char ipBuf[20];
   snprintf(ipBuf, sizeof(ipBuf), "%u.%u.%u.%u", octets[0], octets[1], octets[2], octets[3]);
@@ -149,10 +169,16 @@ void uiSetupPickList(const char* title, const char* const* names, int count, int
   uiMakeLabel(s_screen, title, uiFontTitle(), uiColor565(t.text));
   lv_obj_align(lv_obj_get_child(s_screen, 0), LV_ALIGN_TOP_MID, 0, 6);
 
+  lv_obj_t* back = lv_btn_create(s_screen);
+  lv_obj_set_size(back, 56, 28);
+  lv_obj_align(back, LV_ALIGN_TOP_LEFT, 6, 4);
+  lv_obj_add_event_cb(back, setupAction, LV_EVENT_CLICKED, (void*)(intptr_t)UiActionId::PinBack);
+  uiMakeLabel(back, "Back", uiFontBody(), uiColor565(t.text));
+
   // Custom rows instead of lv_list + CHECKED (CHECKED drew a broken "x"/glyph with our fonts).
   lv_obj_t* list = lv_obj_create(s_screen);
   lv_obj_remove_style_all(list);
-  lv_obj_set_size(list, LV_PCT(94), LV_PCT(78));
+  lv_obj_set_size(list, LV_PCT(94), LV_PCT(72));
   lv_obj_align(list, LV_ALIGN_BOTTOM_MID, 0, -4);
   lv_obj_set_style_bg_color(list, uiColor565(t.bg), 0);
   lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);

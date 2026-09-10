@@ -35,3 +35,4 @@ struct UiBmsWidgets {
 
 void uiBmsBuild(UiShellWidgets& shell, UiBmsWidgets& b);
 void uiBmsUpdate(UiBmsWidgets& b, const BmsData& data);
+bool uiBmsNeedsBuild(const UiBmsWidgets& b);

@@ -29,7 +29,15 @@ void UiLv::setRotation(uint8_t rotation) {
 
 void UiLv::setTheme(uint8_t themeId) {
   uiThemeApply(themeId);
-  if (shellActive_) showPage(currentPage_);
+  if (!shellActive_) return;
+  // Inline colors are set at create-time; rebuild shell + page widgets for the new palette.
+  shellActive_ = false;
+  uiShellDestroy(shell_);
+  uiGlanceDestroy(glance_);
+  bms_ = UiBmsWidgets();
+  history_ = UiHistoryWidgets();
+  settings_ = UiSettingsWidgets();
+  rebuildIfNeeded(currentPage_);
 }
 
 void UiLv::tick() { lvglPortTick(); }
@@ -73,8 +81,11 @@ void UiLv::rebuildIfNeeded(UiPage page) {
     if (page == UiPage::Glance) {
       if (uiGlanceNeedsBuild(glance_, glanceLayout_, isLandscape(rotation_)))
         uiGlanceBuild(shell_, glance_, glanceLayout_, isLandscape(rotation_));
-    } else if (page == UiPage::Bms) uiBmsBuild(shell_, bms_);
-    else if (page == UiPage::History) uiHistoryBuild(shell_, history_);
+    } else if (page == UiPage::Bms) {
+      if (uiBmsNeedsBuild(bms_)) uiBmsBuild(shell_, bms_);
+    } else if (page == UiPage::History) {
+      if (uiHistoryNeedsBuild(history_)) uiHistoryBuild(shell_, history_);
+    }
   }
   lvglPortResetInput();
 }
@@ -119,6 +130,7 @@ void UiLv::updateBms(const BmsData& b) {
   if (!shell_.root) return;
   uiShellSetPage(shell_, UiPage::Bms);
   uiShellSetHeader(shell_, LV_SYMBOL_BATTERY_FULL " Battery", b.ok ? "BMS" : "N/A");
+  if (uiBmsNeedsBuild(bms_)) uiBmsBuild(shell_, bms_);
   uiBmsUpdate(bms_, b);
 }
 
@@ -127,6 +139,7 @@ void UiLv::updateHistory(const HistoryData& h) {
   if (!shell_.root) return;
   uiShellSetPage(shell_, UiPage::History);
   uiShellSetHeader(shell_, LV_SYMBOL_LIST " History", String(h.hours) + "h");
+  if (uiHistoryNeedsBuild(history_)) uiHistoryBuild(shell_, history_);
   uiHistoryUpdate(history_, h);
 }
 

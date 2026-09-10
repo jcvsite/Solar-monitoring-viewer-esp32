@@ -11,6 +11,7 @@ struct UiWifiWidgets {
   lv_obj_t* passScreen = nullptr;
   lv_obj_t* ta = nullptr;
   lv_obj_t* kb = nullptr;
+  lv_obj_t* showBtnLbl = nullptr;
 };
 
 void uiWifiBuildList(UiWifiWidgets& w, const std::vector<WifiNetwork>& nets, int selected, const String& status);

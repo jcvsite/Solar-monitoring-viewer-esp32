@@ -16,5 +16,3 @@ bool touchInputBegin();
 void touchInputSetRotation(uint8_t tftRotation);
 void touchInputReset();
 bool touchInputRead(int16_t& x, int16_t& y);
-bool touchInputSample(TouchSample& out);
-void touchInputShowTap(TFT_eSPI& tft, int16_t x, int16_t y);

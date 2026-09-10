@@ -1,5 +1,7 @@
 #include "device_web.h"
 #include "lvgl_port.h"
+#include "layout.h"
+#include "theme.h"
 #include <WebServer.h>
 #include <WiFi.h>
 #include <string.h>
@@ -78,29 +80,41 @@ button{margin-top:1rem;padding:.6rem 1.2rem;background:#0a84ff;color:#fff;border
   html += String(settings_.hostPort);
   html += R"raw("></label>
 <label>Layout<select name="layout">)raw";
-  const char* layouts[] = {"Classic", "Compact", "Ring", "Bars", "Flow"};
   for (int i = 0; i < 5; i++) {
     html += "<option value='" + String(i) + "'";
     if ((int)settings_.glanceLayout == i) html += " selected";
-    html += ">" + String(layouts[i]) + "</option>";
+    html += ">" + String(layoutName((uint8_t)i)) + "</option>";
   }
   html += R"raw(</select></label>
 <label>Theme<select name="theme">)raw";
-  const char* themes[] = {"Dark", "Light", "Solar", "Ocean", "Forest"};
   for (int i = 0; i < 5; i++) {
     html += "<option value='" + String(i) + "'";
     if ((int)settings_.themeId == i) html += " selected";
-    html += ">" + String(themes[i]) + "</option>";
+    html += ">" + String(themeName((uint8_t)i)) + "</option>";
   }
   html += R"raw(</select></label>
 <label>Rotation<select name="rot">)raw";
-  const char* rots[] = {"Portrait", "Landscape", "Portrait flip", "Landscape flip"};
   for (int i = 0; i < 4; i++) {
     html += "<option value='" + String(i) + "'";
     if ((int)settings_.screenRotation == i) html += " selected";
-    html += ">" + String(rots[i]) + "</option>";
+    html += ">" + String(rotationLabel((uint8_t)i)) + "</option>";
   }
   html += R"raw(</select></label>
+<label>Brightness (0-255)<input name="bri" type="number" min="0" max="255" value=")raw";
+  html += String(settings_.brightness);
+  html += R"raw("></label>
+<label><input type="checkbox" name="nightMode" )raw";
+  if (settings_.nightMode) html += "checked";
+  html += R"raw(> Night mode</label>
+<label>Night brightness<input name="nightBri" type="number" min="1" max="255" value=")raw";
+  html += String(settings_.nightBrightness);
+  html += R"raw("></label>
+<label>Night start hour (0-23)<input name="nightStart" type="number" min="0" max="23" value=")raw";
+  html += String(settings_.nightStartMin / 60);
+  html += R"raw("></label>
+<label>Night end hour (0-23)<input name="nightEnd" type="number" min="0" max="23" value=")raw";
+  html += String(settings_.nightEndMin / 60);
+  html += R"raw("></label>
 <label>Settings PIN (4 digits, blank=off)<input name="setpin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder=")raw";
   html += pinRequired(settings_) ? "****" : "off";
   html += R"raw("></label>
@@ -110,6 +124,12 @@ button{margin-top:1rem;padding:.6rem 1.2rem;background:#0a84ff;color:#fff;border
 <label><input type="checkbox" name="useHost" )raw";
   if (settings_.useHostConfig) html += "checked";
   html += R"raw(> Sync from host</label>
+<label><input type="checkbox" name="chkUpd" )raw";
+  if (settings_.checkForUpdate) html += "checked";
+  html += R"raw(> Check for updates</label>
+<label><input type="checkbox" name="autoUpd" )raw";
+  if (settings_.autoInstallUpdate) html += "checked";
+  html += R"raw(> Auto-install updates</label>
 </div>
 <button type="submit">Save</button>
 </form>
@@ -155,6 +175,14 @@ void DeviceWeb::handleSave() {
   if (s_server.hasArg("layout")) settings_.glanceLayout = (uint8_t)constrain(s_server.arg("layout").toInt(), 0, 4);
   if (s_server.hasArg("theme")) settings_.themeId = (uint8_t)constrain(s_server.arg("theme").toInt(), 0, 4);
   if (s_server.hasArg("rot")) settings_.screenRotation = (uint8_t)constrain(s_server.arg("rot").toInt(), 0, 3);
+  if (s_server.hasArg("bri")) settings_.brightness = (uint8_t)constrain(s_server.arg("bri").toInt(), 0, 255);
+  settings_.nightMode = s_server.hasArg("nightMode");
+  if (s_server.hasArg("nightBri"))
+    settings_.nightBrightness = (uint8_t)constrain(s_server.arg("nightBri").toInt(), 1, 255);
+  if (s_server.hasArg("nightStart"))
+    settings_.nightStartMin = (uint16_t)constrain(s_server.arg("nightStart").toInt(), 0, 23) * 60;
+  if (s_server.hasArg("nightEnd"))
+    settings_.nightEndMin = (uint16_t)constrain(s_server.arg("nightEnd").toInt(), 0, 23) * 60;
   if (s_server.hasArg("setpin")) {
     String p = s_server.arg("setpin");
     p.trim();
@@ -162,6 +190,9 @@ void DeviceWeb::handleSave() {
   }
   settings_.gridOfflineAlert = s_server.hasArg("gridAlert");
   settings_.useHostConfig = s_server.hasArg("useHost");
+  settings_.checkForUpdate = s_server.hasArg("chkUpd");
+  settings_.autoInstallUpdate = s_server.hasArg("autoUpd");
+  if (settings_.autoInstallUpdate) settings_.checkForUpdate = true;
   s_server.send(200, "text/html", "<html><body><p>Saved.</p><a href='/'>Back</a></body></html>");
   extern bool gDeviceWebSaved;
   gDeviceWebSaved = true;

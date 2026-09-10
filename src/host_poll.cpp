@@ -22,7 +22,20 @@ static void hostPollTask(void* arg) {
   for (;;) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     if (!s_api || !s_settings) continue;
-    if (s_settings->hostIp.length() == 0 || WiFi.status() != WL_CONNECTED) {
+
+    String hostIp;
+    uint16_t hostPort = 0;
+    String token;
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(80)) == pdTRUE) {
+      hostIp = s_settings->hostIp;
+      hostPort = s_settings->hostPort;
+      token = s_settings->token;
+      xSemaphoreGive(s_mutex);
+    } else {
+      continue;
+    }
+
+    if (hostIp.length() == 0 || WiFi.status() != WL_CONNECTED) {
       s_busy = false;
       continue;
     }
@@ -32,7 +45,7 @@ static void hostPollTask(void* arg) {
 
     if (page == UiPage::Bms) {
       BmsData b;
-      if (s_api->fetchBms(s_settings->hostIp, s_settings->hostPort, s_settings->token, b)) {
+      if (s_api->fetchBms(hostIp, hostPort, token, b)) {
         if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(80)) == pdTRUE) {
           s_bms = b;
           s_haveBms = true;
@@ -41,7 +54,7 @@ static void hostPollTask(void* arg) {
       }
     } else if (page == UiPage::History) {
       HistoryData h;
-      if (s_api->fetchHistory(s_settings->hostIp, s_settings->hostPort, s_settings->token, 24, h)) {
+      if (s_api->fetchHistory(hostIp, hostPort, token, 24, h)) {
         if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(80)) == pdTRUE) {
           s_history = h;
           s_haveHistory = true;
@@ -50,7 +63,7 @@ static void hostPollTask(void* arg) {
       }
     } else {
       GlanceData g;
-      if (s_api->fetchGlance(s_settings->hostIp, s_settings->hostPort, s_settings->token, g)) {
+      if (s_api->fetchGlance(hostIp, hostPort, token, g)) {
         if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(80)) == pdTRUE) {
           s_glance = g;
           s_haveGlance = true;

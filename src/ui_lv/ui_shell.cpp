@@ -295,7 +295,7 @@ void uiShellSetPage(UiShellWidgets& w, UiPage page) {
 
 void uiShellSetHeader(UiShellWidgets& w, const String& left, const String& right) {
   uiSetLabelText(w.titleLbl, uiTruncate(left, 16));
-  uiSetLabelText(w.rightLbl, right);
+  uiSetLabelText(w.rightLbl, uiTruncate(right, 18));
   if (w.weatherDot) lv_obj_add_flag(w.weatherDot, LV_OBJ_FLAG_HIDDEN);
   if (w.alertDot) lv_obj_add_flag(w.alertDot, LV_OBJ_FLAG_HIDDEN);
 }

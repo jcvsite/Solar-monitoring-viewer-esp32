@@ -17,3 +17,4 @@ struct UiHistoryWidgets {
 
 void uiHistoryBuild(UiShellWidgets& shell, UiHistoryWidgets& h);
 void uiHistoryUpdate(UiHistoryWidgets& h, const HistoryData& data);
+bool uiHistoryNeedsBuild(const UiHistoryWidgets& h);

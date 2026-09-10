@@ -15,6 +15,13 @@ enum class UiActionId : uint8_t {
   NavPage,
   OpenSettings,
   SettingsTab,
+  CycleBrightness,
+  ToggleNightMode,
+  CycleNightBrightness,
+  CycleNightStart,
+  CycleNightEnd,
+  OpenPickLayout,
+  OpenPickTheme,
   PickLayout,
   PickTheme,
   RotateScreen,
@@ -26,9 +33,11 @@ enum class UiActionId : uint8_t {
   WifiPhonePortal,
   WifiPickNetwork,
   WifiConnect,
+  WifiToggleShowPass,
   WifiBack,
   HostChoiceDiscover,
   HostChoiceManual,
+  HostChoiceSkip,
   FindingHostCancel,
   ManualOctetSelect,
   ManualOctetDec,
@@ -54,7 +63,6 @@ struct UiActionCtx {
   UiSettingsTab settingsTab = UiSettingsTab::Connection;
   int index = -1;
   int digit = -1;
-  bool flag = false;
 };
 
 typedef void (*UiActionHandler)(UiActionId id, const UiActionCtx& ctx);

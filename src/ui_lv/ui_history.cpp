@@ -14,18 +14,18 @@ static lv_coord_t shellContentH(const UiShellWidgets& shell) {
   return h > 0 ? h - 24 - UI_NAV_H - 8 : 180;
 }
 
-static lv_obj_t* addStatRow(lv_obj_t* parent, lv_coord_t w, const char* icon, const char* title, lv_color_t accent,
-                            lv_obj_t** valOut) {
+static lv_obj_t* addStatRow(lv_obj_t* parent, lv_coord_t w, lv_coord_t rowH, const char* icon, const char* title,
+                            lv_color_t accent, lv_obj_t** valOut) {
   const ThemePalette& t = themeActive();
   lv_obj_t* row = lv_obj_create(parent);
   lv_obj_remove_style_all(row);
-  lv_obj_set_size(row, w, 22);
+  lv_obj_set_size(row, w, rowH);
   lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
   lv_obj_t* left = lv_obj_create(row);
   lv_obj_remove_style_all(left);
-  lv_obj_set_size(left, LV_SIZE_CONTENT, 22);
+  lv_obj_set_size(left, LV_SIZE_CONTENT, rowH);
   lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_flex_flow(left, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -37,13 +37,18 @@ static lv_obj_t* addStatRow(lv_obj_t* parent, lv_coord_t w, const char* icon, co
   return row;
 }
 
+bool uiHistoryNeedsBuild(const UiHistoryWidgets& h) { return !h.chart; }
+
 void uiHistoryBuild(UiShellWidgets& shell, UiHistoryWidgets& h) {
   uiShellClearContent(shell);
   h = UiHistoryWidgets();
   const ThemePalette& t = themeActive();
   const lv_coord_t sw = shellContentW(shell);
   const lv_coord_t totalH = shellContentH(shell);
-  const lv_coord_t chartH = totalH / 4;
+  const bool landscape = shell.root && lv_obj_get_width(shell.root) > lv_obj_get_height(shell.root);
+  const lv_coord_t chartH =
+      landscape ? (lv_coord_t)max((int)(totalH / 3), 56) : (lv_coord_t)max((int)(totalH / 4), 70);
+  const lv_coord_t rowH = landscape ? 16 : 22;
 
   h.emptyLbl = uiMakeLabel(shell.content, "No history yet", uiFontTitle(), uiColor565(t.muted));
   lv_obj_add_flag(h.emptyLbl, LV_OBJ_FLAG_HIDDEN);
@@ -52,9 +57,9 @@ void uiHistoryBuild(UiShellWidgets& shell, UiHistoryWidgets& h) {
   lv_obj_set_width(h.legend, sw);
 
   h.chart = lv_chart_create(shell.content);
-  lv_obj_set_size(h.chart, sw, chartH > 70 ? chartH : 70);
+  lv_obj_set_size(h.chart, sw, chartH);
   lv_chart_set_type(h.chart, LV_CHART_TYPE_LINE);
-  lv_chart_set_point_count(h.chart, 24);
+  lv_chart_set_point_count(h.chart, 48);
   lv_chart_set_range(h.chart, LV_CHART_AXIS_PRIMARY_Y, 0, 100);
   lv_chart_set_range(h.chart, LV_CHART_AXIS_SECONDARY_Y, 0, 100);
   lv_chart_set_div_line_count(h.chart, 2, 3);
@@ -69,22 +74,18 @@ void uiHistoryBuild(UiShellWidgets& shell, UiHistoryWidgets& h) {
   h.serSoc = lv_chart_add_series(h.chart, uiColor565(t.charge), LV_CHART_AXIS_SECONDARY_Y);
 
   h.statsCard = uiMakeCard(shell.content, sw, totalH - chartH - 24);
-  lv_obj_set_style_pad_all(h.statsCard, 6, 0);
+  lv_obj_set_style_pad_all(h.statsCard, landscape ? 3 : 6, 0);
   lv_obj_set_flex_flow(h.statsCard, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_row(h.statsCard, 4, 0);
+  lv_obj_set_style_pad_row(h.statsCard, landscape ? 1 : 4, 0);
+  lv_obj_add_flag(h.statsCard, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(h.statsCard, LV_DIR_VER);
 
   static const char* icons[] = {LV_SYMBOL_CHARGE, LV_SYMBOL_HOME, LV_SYMBOL_DOWNLOAD, LV_SYMBOL_UPLOAD,
                                 LV_SYMBOL_BATTERY_FULL, LV_SYMBOL_BATTERY_EMPTY};
   static const char* titles[] = {"Today PV", "Today Load", "Grid In", "Grid Out", "Batt Charge", "Batt Discharge"};
-  static uint16_t colors[] = {0, 0, 0, 0, 0, 0};
-  colors[0] = t.pv;
-  colors[1] = t.text;
-  colors[2] = t.gridImport;
-  colors[3] = t.gridExport;
-  colors[4] = t.charge;
-  colors[5] = t.disch;
+  uint16_t colors[] = {t.pv, t.text, t.gridImport, t.gridExport, t.charge, t.disch};
   for (int i = 0; i < 6; i++) {
-    addStatRow(h.statsCard, sw - 16, icons[i], titles[i], uiColor565(colors[i]), &h.statVal[i]);
+    addStatRow(h.statsCard, sw - 16, rowH, icons[i], titles[i], uiColor565(colors[i]), &h.statVal[i]);
   }
 }
 
@@ -108,11 +109,9 @@ void uiHistoryUpdate(UiHistoryWidgets& h, const HistoryData& data) {
   snprintf(legend, sizeof(legend), LV_SYMBOL_LIST " %dh  PV / Load / SOC", data.hours > 0 ? data.hours : 24);
   uiSetLabelText(h.legend, legend);
 
-  // Evenly sample across the full window (API may send up to ~120 pts for 24h).
-  // Taking the first N alone only showed the older half of the day.
+  // Evenly sample across the full window into the fixed 48-point series.
   const size_t srcN = data.points.size();
-  const uint16_t n = (uint16_t)min(srcN, (size_t)48);
-  lv_chart_set_point_count(h.chart, n);
+  const uint16_t n = 48;
 
   float maxW = 500.0f;
   for (const auto& p : data.points) {
@@ -127,7 +126,7 @@ void uiHistoryUpdate(UiHistoryWidgets& h, const HistoryData& data) {
   lv_coord_t* loadPts = lv_chart_get_y_array(h.chart, h.serLoad);
   lv_coord_t* socPts = lv_chart_get_y_array(h.chart, h.serSoc);
   for (uint16_t i = 0; i < n; i++) {
-    size_t idx = (n <= 1 || srcN <= 1) ? 0 : (i * (srcN - 1)) / (n - 1);
+    size_t idx = (srcN <= 1) ? 0 : (i * (srcN - 1)) / (n - 1);
     if (idx >= srcN) idx = srcN - 1;
     const auto& p = data.points[idx];
     pvPts[i] = isnan(p.pv_w) ? 0 : (lv_coord_t)(p.pv_w / 100.0f);

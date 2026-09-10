@@ -15,7 +15,7 @@ void uiSplashShow(const char* msg) {
 
   s_splash = lv_obj_create(NULL);
   lv_obj_remove_style_all(s_splash);
-  lv_obj_set_style_bg_color(s_splash, lv_color_white(), 0);
+  lv_obj_set_style_bg_color(s_splash, uiColor565(themeActive().bg), 0);
   lv_obj_set_style_bg_opa(s_splash, LV_OPA_COVER, 0);
   lv_obj_set_size(s_splash, LV_HOR_RES, LV_VER_RES);
   lv_obj_clear_flag(s_splash, LV_OBJ_FLAG_SCROLLABLE);

@@ -15,6 +15,7 @@ static int16_t s_touchLastY = 0;
 static bool s_touchDown = false;
 static uint32_t s_touchDownMs = 0;
 static int s_pendingSwipe = 0;
+static int s_swipeExcludeTop = 0;
 
 static constexpr int kSwipeMinPx = 48;
 static constexpr uint32_t kSwipeMaxMs = 450;
@@ -86,8 +87,8 @@ static void touchReadCb(lv_indev_drv_t* drv, lv_indev_data_t* data) {
       const int dy = (int)s_touchLastY - (int)s_touchStartY;
       const uint32_t held = millis() - s_touchDownMs;
       const int navTop = navY(s_rotation) - 4;
-      if (s_touchStartY < navTop && held <= kSwipeMaxMs && abs(dx) >= kSwipeMinPx &&
-          abs(dx) > abs(dy) * 2) {
+      if (s_touchStartY >= s_swipeExcludeTop && s_touchStartY < navTop && held <= kSwipeMaxMs &&
+          abs(dx) >= kSwipeMinPx && abs(dx) > abs(dy) * 2) {
         s_pendingSwipe = dx < 0 ? -1 : 1;
       }
     }
@@ -102,6 +103,8 @@ int lvglPortConsumeSwipe() {
   s_pendingSwipe = 0;
   return swipe;
 }
+
+void lvglPortSetSwipeExcludeTop(int y) { s_swipeExcludeTop = y < 0 ? 0 : y; }
 
 void lvglPortResetInput() {
   s_touchDown = false;
