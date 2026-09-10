@@ -5,3 +5,5 @@ webflash/firmware/*.bin
 .vscode/launch.json
 .vscode/ipch
 secrets.h
+
+*.ttf
